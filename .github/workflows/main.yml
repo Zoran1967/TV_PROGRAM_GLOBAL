@@ -1,0 +1,15 @@
+name: Provera Actions
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  provera:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preuzmi kod
+        uses: actions/checkout@v4
+
+      - name: Prikazi fajlove u repozitorijumu
+        run: ls -R
