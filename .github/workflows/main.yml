@@ -1,15 +1,80 @@
-name: Provera Actions
+name: Izgradnja APK
 
 on:
   push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   workflow_dispatch:
 
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  provera:
+  testovi:
     runs-on: ubuntu-latest
     steps:
       - name: Preuzmi kod
         uses: actions/checkout@v4
 
-      - name: Prikazi fajlove u repozitorijumu
-        run: ls -R
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Provera sintakse i testovi
+        run: |
+          python -m pip install pytest
+          python -m py_compile main.py app/*.py tests/*.py
+          python -m pytest -q tests
+
+  apk:
+    needs: testovi
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - name: Preuzmi kod
+        uses: actions/checkout@v4
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Sistemski paketi
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip autoconf automake libtool \
+            pkg-config zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev \
+            build-essential
+
+      - name: Instaliraj Buildozer
+        run: python -m pip install buildozer==1.6.0
+
+      - name: Izgradi APK
+        run: buildozer -v android debug
+
+      - name: Sacuvaj APK (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tv-program-global-debug-apk
+          path: bin/*.apk
+          if-no-files-found: error
+
+      - name: Objavi APK (Releases)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: APK izgradnja ${{ github.run_number }}
+          prerelease: true
+          files: bin/*.apk
