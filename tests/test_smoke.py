@@ -125,7 +125,7 @@ class _InsetsOld:
 def test_android_insets_logic(monkeypatch, sdk, insets_obj, expected):
     from app.utils import android_insets
 
-    monkeypatch.setattr(android_insets, "platform", "android")
+    monkeypatch.setattr(android_insets, "is_android", lambda: True)
     monkeypatch.setitem(sys.modules, "jnius", _fake_jnius(sdk, insets_obj))
     assert android_insets.get_system_insets() == expected
 
@@ -140,6 +140,6 @@ def test_android_insets_error_returns_none(monkeypatch):
         raise RuntimeError("JNI greska")
 
     broken.autoclass = fail
-    monkeypatch.setattr(android_insets, "platform", "android")
+    monkeypatch.setattr(android_insets, "is_android", lambda: True)
     monkeypatch.setitem(sys.modules, "jnius", broken)
     assert android_insets.get_system_insets() is None

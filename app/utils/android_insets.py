@@ -2,12 +2,28 @@
 
 Od Androida 15 aplikacija se crta preko cele povrsine ekrana, pa sama mora
 da ostavi prostor za sistemske trake.
+
+Modul ne uvozi Kivy na vrhu, da bi testovi mogli da rade bez njega.
 """
 
-from kivy.logger import Logger
-from kivy.utils import platform
+import logging
+import os
 
 SDK_WITH_INSETS_API = 30
+
+
+def is_android():
+    """Prepoznavanje Androida na isti nacin kao Kivy (promenljiva okruzenja)."""
+    return "ANDROID_ARGUMENT" in os.environ
+
+
+def _log_warning(message):
+    try:
+        from kivy.logger import Logger
+
+        Logger.warning("TVPG: %s", message)
+    except ImportError:
+        logging.getLogger(__name__).warning(message)
 
 
 def get_system_insets():
@@ -16,12 +32,12 @@ def get_system_insets():
     Van Androida vraca (0, 0). Na Androidu vraca None kada sistem jos ne daje
     podatke ili kada dodje do greske; pozivalac tada pokusava ponovo kasnije.
     """
-    if platform != "android":
+    if not is_android():
         return (0, 0)
     try:
         return _read_android_insets()
     except Exception as error:  # JNI greske ne smeju da sruse aplikaciju
-        Logger.warning("TVPG: ne mogu da procitam sistemske trake: %s", error)
+        _log_warning("ne mogu da procitam sistemske trake: %s" % error)
         return None
 
 
