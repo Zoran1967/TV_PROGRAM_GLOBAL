@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.buildozer/
+bin/
+*.apk
+*.aab
+*.keystore
+*.jks
+.env
+secrets.*
+.pytest_cache/
