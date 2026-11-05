@@ -19,6 +19,7 @@ app/
   strings.py             tekstovi interfejsa (srpski)
   theme.py               boje
   ui/main.kv             izgled ekrana
+  utils/android_insets.py  visina sistemskih traka na Androidu
 tests/test_smoke.py      osnovni testovi
 .github/workflows/build-apk.yml   izgradnja APK-a na GitHub Actions
 ```
@@ -54,8 +55,8 @@ Test izgradnje UI-ja radi samo kad postoji ekran (na racunaru); u GitHub Actions
 
 ## Poznati problemi i neproveren deo
 
-- APK nije izgradjen niti pokretan na uredjaju ili emulatoru. Prva izgradnja na GitHub Actions je provera (go/no-go).
-- UI stablo je proveravano samo na racunaru (Python 3.12, virtuelni ekran): gradi se bez greske. Izgled nije vizuelno proveren.
+- APK (0.1.0) je izgradjen na GitHub Actions i korisnik ga je instalirao i pokrenuo na jednom Android telefonu. Drugi uredjaji i emulator nisu testirani.
+- Verzija 0.1.0 se na telefonu crtala preko statusne i navigacione trake (naslov i donje kartice bili su delimicno zaklonjeni). Verzija 0.1.1 ostavlja prostor za sistemske trake (`app/utils/android_insets.py`); ispravka je proverena samo testovima na racunaru i jos nije potvrdjena na telefonu.
 - KivyMD 1.2.0 je zastareo. KivyMD 2.0.0 sa PyPI zavisi od paketa materialshapes, koji trazi pycairo, a za pycairo nema Android paketa. Da li se 2.0.0 moze izgraditi za Android nije proveravano.
 - Tekstovi se ne osvezavaju pri promeni jezika (Faza 7).
 - Samo arm64-v8a (bez 32-bitnih telefona).

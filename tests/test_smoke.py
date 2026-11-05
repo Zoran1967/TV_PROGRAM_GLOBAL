@@ -63,3 +63,83 @@ def test_ui_tree_builds():
         Window.remove_widget(root)
     assert names == {"search", "favourites", "settings"}
     assert "Python:" in app.runtime_info
+
+
+def test_kv_uses_system_insets():
+    with open(KV_PATH, encoding="utf-8") as handle:
+        kv_text = handle.read()
+    assert "app.inset_top" in kv_text
+    assert "app.inset_bottom" in kv_text
+
+
+def test_insets_outside_android_are_zero():
+    from app.utils import android_insets
+
+    assert android_insets.get_system_insets() == (0, 0)
+
+
+def _fake_jnius(sdk, insets_obj):
+    import types
+
+    class Namespace:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+
+    view = Namespace(getRootWindowInsets=lambda: insets_obj)
+    window = Namespace(getDecorView=lambda: view)
+    activity = Namespace(getWindow=lambda: window)
+    classes = {
+        "org.kivy.android.PythonActivity": Namespace(mActivity=activity),
+        "android.os.Build$VERSION": Namespace(SDK_INT=sdk),
+        "android.view.WindowInsets$Type": Namespace(
+            systemBars=lambda: 1, displayCutout=lambda: 128
+        ),
+    }
+    module = types.ModuleType("jnius")
+    module.autoclass = lambda name: classes[name]
+    return module
+
+
+class _Insets30:
+    def getInsets(self, mask):
+        assert mask == 129
+        return type("Bars", (), {"top": 80, "bottom": 130})()
+
+
+class _InsetsOld:
+    def getSystemWindowInsetTop(self):
+        return 60
+
+    def getSystemWindowInsetBottom(self):
+        return 90
+
+
+@pytest.mark.parametrize(
+    "sdk, insets_obj, expected",
+    [
+        (36, _Insets30(), (80, 130)),
+        (28, _InsetsOld(), (60, 90)),
+        (36, None, None),
+    ],
+)
+def test_android_insets_logic(monkeypatch, sdk, insets_obj, expected):
+    from app.utils import android_insets
+
+    monkeypatch.setattr(android_insets, "platform", "android")
+    monkeypatch.setitem(sys.modules, "jnius", _fake_jnius(sdk, insets_obj))
+    assert android_insets.get_system_insets() == expected
+
+
+def test_android_insets_error_returns_none(monkeypatch):
+    import types
+    from app.utils import android_insets
+
+    broken = types.ModuleType("jnius")
+
+    def fail(_name):
+        raise RuntimeError("JNI greska")
+
+    broken.autoclass = fail
+    monkeypatch.setattr(android_insets, "platform", "android")
+    monkeypatch.setitem(sys.modules, "jnius", broken)
+    assert android_insets.get_system_insets() is None
