@@ -1,3 +1,34 @@
+<SearchView>:
+    orientation: "vertical"
+    padding: dp(16), dp(8), dp(16), dp(8)
+    spacing: dp(8)
+
+    MDTextField:
+        id: query
+        hint_text: app.t("search_hint")
+        mode: "rectangle"
+        line_color_focus: app.colors["gold"]
+        hint_text_color_focus: app.colors["gold"]
+        on_text: root.schedule_search(self.text)
+
+    MDLabel:
+        text: root.status_text
+        theme_text_color: "Custom"
+        text_color: app.colors["text_muted"]
+        size_hint_y: None
+        height: self.texture_size[1]
+
+    MDLabel:
+        text: root.selected_text
+        theme_text_color: "Custom"
+        text_color: app.colors["gold"]
+        size_hint_y: None
+        height: self.texture_size[1]
+
+    MDScrollView:
+        MDList:
+            id: results
+
 MDScreen:
     md_bg_color: app.colors["navy"]
 
@@ -21,25 +52,7 @@ MDScreen:
                 text: app.t("tab_search")
                 icon: "magnify"
 
-                MDBoxLayout:
-                    orientation: "vertical"
-                    padding: dp(24)
-                    spacing: dp(16)
-
-                    MDLabel:
-                        text: app.t("search_title")
-                        halign: "center"
-                        font_style: "H5"
-                        theme_text_color: "Custom"
-                        text_color: app.colors["gold"]
-                        size_hint_y: None
-                        height: self.texture_size[1]
-
-                    MDLabel:
-                        text: app.t("search_placeholder")
-                        halign: "center"
-                        theme_text_color: "Custom"
-                        text_color: app.colors["text_muted"]
+                SearchView:
 
             MDBottomNavigationItem:
                 name: "favourites"

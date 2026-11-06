@@ -143,3 +143,59 @@ def test_android_insets_error_returns_none(monkeypatch):
     monkeypatch.setattr(android_insets, "is_android", lambda: True)
     monkeypatch.setitem(sys.modules, "jnius", broken)
     assert android_insets.get_system_insets() is None
+
+
+def test_search_screen_flow():
+    pytest.importorskip("kivymd")
+    if not os.environ.get("DISPLAY") and not os.environ.get("KIVY_GL_BACKEND"):
+        pytest.skip("nema ekrana za Kivy prozor")
+    os.environ.setdefault("KIVY_NO_ARGS", "1")
+    from kivy.clock import Clock
+    from kivy.core.window import Window
+    from app.tvapp import TvProgramGlobalApp
+
+    app = TvProgramGlobalApp()
+    root = app.build()
+    Window.add_widget(root)
+    try:
+        for _ in range(5):
+            Clock.tick()
+        view = next(w for w in root.walk() if w.__class__.__name__ == "SearchView")
+        assert app.search_service is not None
+        assert "Katalog stanica:" in app.runtime_info
+        assert view.status_text == app.t("search_examples")
+
+        view.run_search("RTS 1")
+        items = list(view.ids.results.children)
+        assert len(items) >= 3
+        assert any(
+            item.text == "RTS 1" and "Serbia (RS)" in item.secondary_text
+            for item in items
+        )
+        assert view.status_text.startswith("Pronađeno stanica:")
+
+        view.run_search("xqzvjk")
+        assert not view.ids.results.children
+        assert view.status_text == app.t("search_not_found")
+
+        view.run_search("a")
+        assert view.status_text == app.t("search_too_short")
+
+        view.run_search("BBC1")
+        item = view.ids.results.children[0]
+        assert "pronađeno kao: BBC1" in item.secondary_text
+        item.dispatch("on_release")
+        assert app.selected_channel.catalog_id == "BBCOne.uk"
+        assert view.selected_text.startswith("Izabrano: BBC One (United Kingdom)")
+
+        # debounce: tekst se unosi u polje, a pretraga se pokrece posle kratke pauze
+        view.ids.query.text = "HRT1"
+        # pretraga je zakazana, ali jos nije pokrenuta
+        assert view._pending is not None
+        import time as _time
+        _time.sleep(0.4)
+        for _ in range(3):
+            Clock.tick()
+        assert [i.text for i in view.ids.results.children] == ["HRT 1"]
+    finally:
+        Window.remove_widget(root)
