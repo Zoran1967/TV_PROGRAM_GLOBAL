@@ -4,7 +4,7 @@ Koristi je i aplikacija (provera verzije) i alat tools/build_catalog.py
 (pravljenje baze), da sema ostane na jednom mestu.
 """
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_SQL = """
 CREATE TABLE meta (
@@ -41,6 +41,19 @@ CREATE TABLE channel_alias (
 );
 
 CREATE INDEX idx_channel_alias_key ON channel_alias(alias_key);
+
+-- Koji izvor ima raspored za koju stanicu. source_channel_id je oznaka stanice
+-- kod izvora, timezone je IANA zona u kojoj izvor daje vremena (NULL = nepoznata).
+CREATE TABLE channel_source (
+    channel_id        INTEGER NOT NULL REFERENCES channel(id),
+    source_id         TEXT NOT NULL,
+    source_channel_id TEXT NOT NULL,
+    timezone          TEXT,
+    days_available    INTEGER,
+    priority          INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (channel_id, source_id),
+    UNIQUE (source_id, source_channel_id)
+);
 """
 
 

@@ -18,9 +18,9 @@ from kivy.properties import (
 from kivy.utils import platform
 from kivymd.app import MDApp
 
-from app.database.catalog import CatalogError
+from app.build_flavor import FLAVOR
 from app.screens.search_view import SearchView  # noqa: F401 (registruje klasu za .kv)
-from app.services.search_service import create_default_service
+from app.services.factory import create_services
 from app.strings import DEFAULT_LANGUAGE, t as translate
 from app.theme import COLORS
 from app.utils.android_insets import get_system_insets
@@ -43,6 +43,8 @@ class TvProgramGlobalApp(MDApp):
     inset_bottom = NumericProperty(0)
     # Servis pretrage (None ako katalog stanica ne moze da se otvori)
     search_service = ObjectProperty(None, allownone=True)
+    # Servis rasporeda (None ako katalog stanica ne moze da se otvori)
+    schedule_service = ObjectProperty(None, allownone=True)
     # Poslednja stanica koju je korisnik izabrao u pretrazi
     selected_channel = ObjectProperty(None, allownone=True)
 
@@ -56,19 +58,11 @@ class TvProgramGlobalApp(MDApp):
     def build(self):
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "Amber"
-        self.search_service = self._open_search_service()
+        self.search_service, self.schedule_service = create_services()
         self._refresh_runtime_info()
         Window.bind(on_resize=self._on_window_resize)
         Builder.unload_file(KV_PATH)  # ne dozvoljava dvostruko ucitavanje pravila
         return Builder.load_file(KV_PATH)
-
-    @staticmethod
-    def _open_search_service():
-        try:
-            return create_default_service()
-        except CatalogError as error:
-            Logger.error("TVPG: katalog stanica nije dostupan: %s", error)
-            return None
 
     def on_start(self):
         self._restart_inset_updates(0)
@@ -108,6 +102,14 @@ class TvProgramGlobalApp(MDApp):
             summary["source_commit"][:7],
         )
 
+    def _providers_info(self):
+        if self.schedule_service is None:
+            return "nedostupni"
+        summary = self.schedule_service.provider_summary()
+        if not summary:
+            return "nijedan (licenca nije potvrđena)"
+        return ", ".join("%s (licenca: %s)" % item for item in summary)
+
     def _refresh_runtime_info(self):
         self.runtime_info = (
             "Verzija aplikacije: %s\n"
@@ -116,7 +118,9 @@ class TvProgramGlobalApp(MDApp):
             "KivyMD: %s\n"
             "Platforma: %s\n"
             "Sistemske trake (gore/dole): %d / %d px\n"
-            "Katalog stanica: %s"
+            "Katalog stanica: %s\n"
+            "Izvori rasporeda: %s\n"
+            "Vrsta izgradnje: %s"
         ) % (
             __version__,
             sys.version.split()[0],
@@ -126,4 +130,6 @@ class TvProgramGlobalApp(MDApp):
             self.inset_top,
             self.inset_bottom,
             self._catalog_info(),
+            self._providers_info(),
+            FLAVOR,
         )

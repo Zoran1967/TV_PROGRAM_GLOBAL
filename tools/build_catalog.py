@@ -36,6 +36,117 @@ COMMIT_API = "https://api.github.com/repos/iptv-org/database/commits/master"
 DEFAULT_OUT = os.path.join(ROOT, "data", "catalog_seed.db")
 LICENSE_TEXT = "Unlicense / CC0 (iptv-org/database)"
 
+# Izvor rasporeda TvProfil: stanice sa oznakom drzave u ID-ju (npr. "rts1.sr").
+# Vremena u njihovim fajlovima su lokalno vreme drzave (vidi README), zato se
+# vezuju samo stanice cija oznaka odredjuje jednu vremensku zonu.
+TVPROFIL_SOURCE_ID = "tvprofil"
+TVPROFIL_COUNTRIES = {
+    "sr": ("RS", "Europe/Belgrade"),
+    "hr": ("HR", "Europe/Zagreb"),
+    "ba": ("BA", "Europe/Sarajevo"),
+    "cg": ("ME", "Europe/Podgorica"),
+    "mk": ("MK", "Europe/Skopje"),
+    "si": ("SI", "Europe/Ljubljana"),
+}
+DEFAULT_TVPROFIL_CSV = os.path.join(ROOT, "data", "sources", "tvprofil_channels.csv")
+DEFAULT_REPORT = os.path.join(ROOT, "data", "sources", "tvprofil_mapping_report.csv")
+DEFAULT_OVERRIDES = os.path.join(ROOT, "data", "sources", "tvprofil_overrides.csv")
+
+
+def map_tvprofil(connection, rows, overrides=None):
+    """Povezuje TvProfil kanale sa stanicama iz kataloga.
+
+    Povezuje samo kada je podudaranje jednoznacno: ista drzava i isti normalizovani
+    naziv (ili ID bez oznake drzave), tacno jedna stanica u katalogu, i tacno jedan
+    TvProfil kanal za tu stanicu. Sve ostalo ostaje nepovezano i ide u izvestaj.
+    `overrides` ({xmltv_id: catalog_id}) su rucno potvrdjene veze za stanice cije se
+    ime razlikuje (npr. HTV1 = HRT 1); prazan catalog_id znaci "ne povezuj".
+    Vraca (statistika, izvestaj).
+    """
+    overrides = overrides or {}
+    index = {}
+    for country, key, channel_id in connection.execute(
+        "SELECT c.country_code, a.alias_key, a.channel_id FROM channel_alias a"
+        " JOIN channel c ON c.id = a.channel_id WHERE a.word_offset = 0"
+    ):
+        index.setdefault((country, key), set()).add(channel_id)
+    catalog_ids = dict(connection.execute("SELECT id, catalog_id FROM channel"))
+    channel_by_catalog_id = {value: key for key, value in catalog_ids.items()}
+
+    report = []
+    claims = {}
+    for row in rows:
+        xmltv_id = row["xmltv_id"].strip()
+        name = row["name"].strip()
+        days = int(row["days_available"])
+        suffix = xmltv_id.rsplit(".", 1)[-1]
+        entry = {"xmltv_id": xmltv_id, "name": name, "days": days,
+                 "status": "", "catalog_id": "", "channel_id": None}
+        report.append(entry)
+        if suffix not in TVPROFIL_COUNTRIES:
+            entry["status"] = "nepodrzana_oznaka"
+            continue
+        if days <= 0:
+            entry["status"] = "izvor_nema_podataka"
+            continue
+        country = TVPROFIL_COUNTRIES[suffix][0]
+        if xmltv_id in overrides and not overrides[xmltv_id]:
+            entry["status"] = "rucno_iskljuceno"
+            continue
+        if xmltv_id in overrides:
+            channel_id = channel_by_catalog_id.get(overrides[xmltv_id])
+            if channel_id is None:
+                entry["status"] = "override_nepoznat_kanal"
+                continue
+            entry["channel_id"] = channel_id
+            claims.setdefault(channel_id, []).append(entry)
+            continue
+        keys = {normalize_key(name), normalize_key(xmltv_id.rsplit(".", 1)[0])}
+        keys.discard("")
+        candidates = set()
+        for key in keys:
+            candidates |= index.get((country, key), set())
+        if not candidates:
+            entry["status"] = "bez_poklapanja"
+        elif len(candidates) > 1:
+            entry["status"] = "vise_poklapanja"
+        else:
+            entry["channel_id"] = next(iter(candidates))
+            claims.setdefault(entry["channel_id"], []).append(entry)
+
+    for channel_id, entries in claims.items():
+        if len(entries) > 1:
+            for entry in entries:
+                entry["status"] = "sukob_vise_kanala"
+                entry["channel_id"] = None
+            continue
+        entry = entries[0]
+        suffix = entry["xmltv_id"].rsplit(".", 1)[-1]
+        connection.execute(
+            "INSERT INTO channel_source (channel_id, source_id, source_channel_id,"
+            " timezone, days_available, priority) VALUES (?, ?, ?, ?, ?, 0)",
+            (channel_id, TVPROFIL_SOURCE_ID, entry["xmltv_id"],
+             TVPROFIL_COUNTRIES[suffix][1], entry["days"]),
+        )
+        entry["status"] = "povezano"
+        entry["catalog_id"] = catalog_ids[channel_id]
+
+    stats = {"tvprofil_u_spisku": len(report)}
+    for entry in report:
+        key = "tvprofil_" + entry["status"]
+        stats[key] = stats.get(key, 0) + 1
+    return stats, report
+
+
+def write_report(path, report):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["xmltv_id", "name", "days_available", "status", "catalog_id"])
+        for entry in sorted(report, key=lambda item: (item["status"], item["xmltv_id"])):
+            writer.writerow([entry["xmltv_id"], entry["name"], entry["days"],
+                             entry["status"], entry["catalog_id"]])
+
 
 def read_csv_text(text):
     return list(csv.DictReader(io.StringIO(text, newline="")))
@@ -45,7 +156,8 @@ def split_alt_names(value):
     return [part.strip() for part in (value or "").split(";") if part.strip()]
 
 
-def build_catalog(channel_rows, country_rows, out_path, meta=None):
+def build_catalog(channel_rows, country_rows, out_path, meta=None, tvprofil_rows=None,
+                  tvprofil_overrides=None):
     """Pravi bazu kataloga. Vraca recnik sa brojevima (statistika)."""
     if os.path.exists(out_path):
         os.remove(out_path)
@@ -118,6 +230,12 @@ def build_catalog(channel_rows, country_rows, out_path, meta=None):
             "INSERT INTO country (code, name) VALUES (?, ?)",
             sorted((code, countries[code]) for code in used_countries),
         )
+        if tvprofil_rows:
+            mapping_stats, report = map_tvprofil(
+                connection, tvprofil_rows, tvprofil_overrides
+            )
+            stats.update(mapping_stats)
+            stats["_tvprofil_report"] = report
         meta = dict(meta or {})
         meta.update(
             {
@@ -126,6 +244,7 @@ def build_catalog(channel_rows, country_rows, out_path, meta=None):
                 "aliases": str(stats["naziva"]),
                 "index_rows": str(stats["redova_indeksa"]),
                 "countries": str(len(used_countries)),
+                "tvprofil_linked": str(stats.get("tvprofil_povezano", 0)),
             }
         )
         connection.executemany(
@@ -167,6 +286,12 @@ def main():
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--commit", help="commit izvora (upisuje se u meta tabelu)")
     parser.add_argument("--built-at", help="vreme izrade (podrazumevano: sada, UTC)")
+    parser.add_argument("--tvprofil-csv", default=DEFAULT_TVPROFIL_CSV,
+                        help="spisak TvProfil kanala (data/sources/tvprofil_channels.csv)")
+    parser.add_argument("--tvprofil-overrides", default=DEFAULT_OVERRIDES,
+                        help="rucno potvrdjene veze (xmltv_id,catalog_id,note)")
+    parser.add_argument("--report", default=DEFAULT_REPORT,
+                        help="izvestaj o povezivanju sa TvProfil kanalima")
     args = parser.parse_args()
 
     if args.csv_dir:
@@ -186,14 +311,28 @@ def main():
     built_at = args.built_at or datetime.datetime.now(datetime.timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
     )
+    tvprofil_rows = None
+    if args.tvprofil_csv and os.path.isfile(args.tvprofil_csv):
+        with open(args.tvprofil_csv, encoding="utf-8-sig", newline="") as handle:
+            tvprofil_rows = list(csv.DictReader(handle))
+    overrides = {}
+    if args.tvprofil_overrides and os.path.isfile(args.tvprofil_overrides):
+        with open(args.tvprofil_overrides, encoding="utf-8-sig", newline="") as handle:
+            overrides = {row["xmltv_id"].strip(): row["catalog_id"].strip()
+                         for row in csv.DictReader(handle)}
     stats = build_catalog(
         read_csv_text(channels_text),
         read_csv_text(countries_text),
         args.out,
         meta={"source_url": SOURCE_REPO, "source_commit": commit, "built_at": built_at},
+        tvprofil_rows=tvprofil_rows,
+        tvprofil_overrides=overrides,
     )
+    report = stats.pop("_tvprofil_report", None)
+    if report is not None:
+        write_report(args.report, report)
     for name, value in stats.items():
-        print("%-30s %s" % (name, value))
+        print("%-34s %s" % (name, value))
     print("Baza: %s (%.1f MB)" % (args.out, os.path.getsize(args.out) / 1e6))
 
 

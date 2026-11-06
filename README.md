@@ -3,8 +3,10 @@
 Android aplikacija (Python, Kivy/KivyMD) za pronalazenje TV stanica i njihovog dnevnog rasporeda.
 Aplikacija prikazuje TV rasporede, ne TV prenos.
 
-**Status: Faza 3 - pretraga televizijskih stanica.** Pretraga radi nad ugradjenim katalogom
-stanica (bez interneta). Raspored jos nije povezan (Faze 4-5), omiljeni stizu u Fazi 6.
+**Status: Faza 4 - povezivanje izvora rasporeda.** Pretraga radi nad ugradjenim katalogom stanica
+(bez interneta). Za 126 stanica sa Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna
+Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnje emisije.
+"Sada/Sledece" i lep prikaz dana stizu u Fazi 5, omiljeni i trajni kes u Fazi 6.
 
 ## Pretraga (Faza 3)
 
@@ -18,6 +20,35 @@ stanica (bez interneta). Raspored jos nije povezan (Faze 4-5), omiljeni stizu u 
   rezultat ima drzavu, a po potrebi mrezu, naziv po kome je pronadjen i ID kataloga.
 - Prvi rezultat se nikad ne bira automatski. Dodir na rezultat samo belezi izbor
   (prikaz rasporeda dolazi u narednim fazama).
+
+## Raspored (Faza 4)
+
+- Dodir na stanicu u rezultatima otvara raspored za danas u vremenskoj zoni stanice
+  (datum, zona i izvor su ispisani; "Nazad na rezultate" vraca na pretragu).
+- Stanica ima raspored samo ako je povezana sa izvorom (u rezultatima se to vidi tek po dodiru;
+  stanice bez izvora dobijaju poruku da izvor nije povezan). Pokrivenost nije obecana.
+- Izvor: TvProfil (https://tvprofil.net/xmltv/), XMLTV fajl po stanici, nekoliko dana unapred.
+  Spisak njihovih kanala je u `data/sources/tvprofil_channels.csv` (prepisan sa njihove stranice
+  06.11.2026.). Povezivanje sa katalogom je dozvoljeno samo kad je jednoznacno (ista drzava i isti
+  naziv, ili rucno potvrdjeno u `data/sources/tvprofil_overrides.csv`). Od 220 kanala sa spiska:
+  126 povezano, 31 bez podataka kod izvora, 59 bez poklapanja, 2 dvosmislena, 2 rucno iskljucena.
+  Izvestaj po kanalu: `data/sources/tvprofil_mapping_report.csv`.
+- Vremena u TvProfil fajlovima nemaju pomak; tumace se kao lokalno vreme drzave stanice
+  (Europe/Belgrade, Zagreb, Ljubljana, Sarajevo, Podgorica, Skopje). Prelazak na letnje/zimsko
+  vreme je obradjen (dvaput isti sat u oktobru). Stanica bez poznate zone ne prikazuje raspored.
+- Greske se objasnjavaju na ekranu: nema veze, HTTP greska (npr. 404), izvor trazi pauzu, prazan
+  odgovor, neispravni podaci, nepoznata zona. Ako osvezavanje ne uspe a postoje stariji podaci iz
+  iste sesije, prikazuju se uz oznaku "stariji podaci" i razlog.
+- Mreza: samo https, rok 20 s, najvise 2 ponovna pokusaja (mrezne greske i HTTP 5xx), 429 se
+  postuje, odgovor najvise 8 MB (i posle gzip raspakivanja), preusmeravanje na http je blokirano.
+  Nema tajnih kljuceva. Preuzimanje radi u pozadinskoj niti.
+- Licenca: TvProfil je besplatan za kucnu upotrebu; za javnu objavu treba pisana dozvola.
+  U `data/providers.json` je zato `license_status = pending`. Izgradnja "dev"
+  (`app/build_flavor.py`) ucitava taj izvor, izgradnja "release" ga ne ucitava dok status
+  ne postane `approved`.
+- Novi izvor: novi adapter u `app/providers/`, unos u `ADAPTER_FACTORIES`
+  (`app/providers/registry.py`) i u `data/providers.json`, plus veze stanica u katalogu
+  (`channel_source`). Ekran i servisi se ne menjaju.
 
 ## Katalog stanica
 
@@ -47,13 +78,21 @@ app/
   ui/main.kv                 izgled ekrana
   screens/search_view.py     ekran pretrage
   services/search_service.py pretraga (pravila, statusi)
+  services/schedule_service.py raspored za danas (kes u memoriji, greske, zona)
+  services/factory.py        pravi servise pri pokretanju
+  providers/                 izvori rasporeda: base, tvprofil, xmltv, registry, errors
+  net/http_client.py         preuzimanje (rok, ogranicenja, ponovni pokusaji)
+  build_flavor.py            "dev" ili "release" izgradnja
   database/schema.py         sema kataloga
   database/catalog.py        citanje kataloga
   models/channel.py          modeli stanice i rezultata
+  models/schedule.py         modeli emisije i veze stanice sa izvorom
   utils/text.py              normalizacija teksta
   utils/android_insets.py    visina sistemskih traka na Androidu
-data/catalog_seed.db         katalog stanica
-tools/build_catalog.py       pravi katalog (ne ulazi u APK)
+data/catalog_seed.db         katalog stanica (+ veze sa izvorom rasporeda)
+data/providers.json          podesavanja izvora rasporeda (bez tajni)
+data/sources/                spisak TvProfil kanala, rucne veze, izvestaj (ne ulazi u APK)
+tools/build_catalog.py       pravi katalog i veze (ne ulazi u APK)
 ci/build.sh, ci/test.sh      skripte za GitHub Actions
 tests/                       testovi
 ```
@@ -85,23 +124,35 @@ tests/                       testovi
 python -m pytest -q tests
 ```
 
-Testovi pretrage rade bez Kivy-ja. Testovi ekrana rade samo kad postoji ekran (na racunaru) i
-u GitHub Actions se preskacu.
+Testovi pretrage, parsera, mreze (pravi lokalni server) i rasporeda rade bez Kivy-ja. Testovi
+ekrana rade samo kad postoji ekran (na racunaru) i u GitHub Actions se preskacu.
 
 ## Poznati problemi i neproveren deo
 
-- APK je izgradjen na GitHub Actions i korisnik ga je instalirao i pokrenuo na jednom Android
-  telefonu (verzija 0.1.0 i 0.1.1; ispravka razmaka za sistemske trake potvrdjena na tom telefonu).
-  Drugi uredjaji i emulator nisu testirani.
-- Pretraga (0.2.0) je proverena testovima na racunaru (ukljucujuci ekran na virtuelnom displeju).
-  Izgled ekrana pretrage i brzina na telefonu nisu proveravani. Na racunaru tipican upit traje
-  manje od 1 ms, najgori (`tv`) oko 30 ms.
-- Unos iz sredine reci (npr. `ena sport`) radi samo kad nema boljih rezultata.
-- Pretraga ne zna za greske u kucanju (npr. `Arena Sprot`).
+- **Preuzimanje sa TvProfil-a nije proveravano na pravom serveru.** Okruzenje u kome se pise kod
+  nema pristup tvprofil.net. Adresa fajla (`https://tvprofil.net/xmltv/data/{id}/weekly_{id}_tvprofil.net.xml`)
+  je preuzeta iz imena fajlova sa njihove stranice i iz javnih primera, a ne iz stvarnog preuzimanja.
+  Parser je proveren samo na izmisljenim XMLTV primerima po XMLTV standardu. Prvo pokretanje na
+  telefonu je prava provera: ako izvor odgovara drugacije, ekran ispisuje razlog (npr. greska 404).
+- **Zona:** pretpostavka da su vremena lokalna po drzavi stanice potice iz XMLTV opisa i primera
+  korisnika; nije potvrdjena na pravom fajlu. Provera na telefonu: npr. dnevnik na RTS1 treba da
+  bude u uobicajeno vreme (oko 19:30), ne sat ranije ili kasnije.
+- Pretraga ne pokazuje unapred koja stanica ima raspored; to se vidi tek posle dodira.
+- Nema trajnog kesa (Faza 6): kes je samo u memoriji tokom sesije.
+- Prikazuju se sve emisije koje se preklapaju sa danasnjim danom; "Sada/Sledece" dolazi u Fazi 5.
+- Stanice van Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna Makedonija) nemaju
+  izvor rasporeda. TvProfil kanali bez oznake drzave (sport, filmovi, vesti...) nisu povezani jer im
+  zona nije odredjena.
+- Na Androidu nisu proveravani: HTTPS sa `certifi` sertifikatima i paket `tzdata` (zone). Ako zona
+  nije dostupna, prikazuje se poruka umesto rasporeda.
+- Pretraga (0.2.0) i ekran su proveravani testovima na racunaru (virtuelni displej). Izgled
+  ekrana rasporeda i brzina na telefonu nisu proveravani.
+- Unos iz sredine reci (npr. `ena sport`) radi samo kad nema boljih rezultata. Pretraga ne zna za
+  greske u kucanju.
+- Nazivi drzava su na engleskom (iz izvora); lokalizacija je u Fazi 7. Tekstovi se ne osvezavaju
+  pri promeni jezika.
 - KivyMD 1.2.0 je zastareo. KivyMD 2.0.0 sa PyPI zavisi od paketa materialshapes, koji trazi
-  pycairo, a za pycairo nema Android paketa. Da li se 2.0.0 moze izgraditi za Android nije proveravano.
-- Tekstovi se ne osvezavaju pri promeni jezika (Faza 7).
-- Samo arm64-v8a (bez 32-bitnih telefona).
-- Debug APK, podrazumevana ikona. Potpisivanje i AAB dolaze u Fazi 9. Dokumentacija Buildozera
-  navodi da za objavu na Google Play treba python-for-android "develop" - proverava se u Fazi 9.
+  pycairo, a za pycairo nema Android paketa. Da li se 2.0.0 moze izgraditi nije proveravano.
+- Samo arm64-v8a. Debug APK, podrazumevana ikona. Potpisivanje i AAB dolaze u Fazi 9. Dokumentacija
+  Buildozera navodi da za objavu na Google Play treba python-for-android "develop" - Faza 9.
 - `package.domain = org.vukica`: identifikator aplikacije je trajan na Google Play, potvrdi pre objave.

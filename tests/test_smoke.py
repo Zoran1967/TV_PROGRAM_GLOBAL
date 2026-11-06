@@ -145,11 +145,7 @@ def test_android_insets_error_returns_none(monkeypatch):
     assert android_insets.get_system_insets() is None
 
 
-def test_search_screen_flow():
-    pytest.importorskip("kivymd")
-    if not os.environ.get("DISPLAY") and not os.environ.get("KIVY_GL_BACKEND"):
-        pytest.skip("nema ekrana za Kivy prozor")
-    os.environ.setdefault("KIVY_NO_ARGS", "1")
+def _build_app_view():
     from kivy.clock import Clock
     from kivy.core.window import Window
     from app.tvapp import TvProgramGlobalApp
@@ -157,20 +153,48 @@ def test_search_screen_flow():
     app = TvProgramGlobalApp()
     root = app.build()
     Window.add_widget(root)
+    for _ in range(5):
+        Clock.tick()
+    view = next(w for w in root.walk() if w.__class__.__name__ == "SearchView")
+    return app, root, view
+
+
+def _needs_display():
+    pytest.importorskip("kivymd")
+    if not os.environ.get("DISPLAY") and not os.environ.get("KIVY_GL_BACKEND"):
+        pytest.skip("nema ekrana za Kivy prozor")
+    os.environ.setdefault("KIVY_NO_ARGS", "1")
+
+
+def _wait_until(condition, timeout=3.0):
+    import time as _time
+    from kivy.clock import Clock
+
+    deadline = _time.monotonic() + timeout
+    while _time.monotonic() < deadline:
+        Clock.tick()
+        if condition():
+            return True
+        _time.sleep(0.01)
+    return False
+
+
+def test_search_screen_flow():
+    _needs_display()
+    from kivy.core.window import Window
+
+    app, root, view = _build_app_view()
     try:
-        for _ in range(5):
-            Clock.tick()
-        view = next(w for w in root.walk() if w.__class__.__name__ == "SearchView")
-        assert app.search_service is not None
+        assert app.search_service is not None and app.schedule_service is not None
         assert "Katalog stanica:" in app.runtime_info
+        assert "tvprofil" in app.runtime_info and "Vrsta izgradnje:" in app.runtime_info
         assert view.status_text == app.t("search_examples")
 
         view.run_search("RTS 1")
         items = list(view.ids.results.children)
         assert len(items) >= 3
         assert any(
-            item.text == "RTS 1" and "Serbia (RS)" in item.secondary_text
-            for item in items
+            item.text == "RTS 1" and "Serbia (RS)" in item.secondary_text for item in items
         )
         assert view.status_text.startswith("Pronađeno stanica:")
 
@@ -181,21 +205,186 @@ def test_search_screen_flow():
         view.run_search("a")
         assert view.status_text == app.t("search_too_short")
 
+        # stanica bez izvora rasporeda (BBC One nema TvProfil kanal)
         view.run_search("BBC1")
         item = view.ids.results.children[0]
         assert "pronađeno kao: BBC1" in item.secondary_text
         item.dispatch("on_release")
         assert app.selected_channel.catalog_id == "BBCOne.uk"
-        assert view.selected_text.startswith("Izabrano: BBC One (United Kingdom)")
+        assert view.in_schedule
+        assert "Raspored: BBC One (United Kingdom)" in view.schedule_text
+        assert "nema povezanog izvora rasporeda" in view.schedule_text
+        assert not view.ids.results.children
 
-        # debounce: tekst se unosi u polje, a pretraga se pokrece posle kratke pauze
+        # povratak na rezultate
+        view.show_results()
+        assert not view.in_schedule and view.schedule_text == ""
+        assert len(view.ids.results.children) == 1
+        assert view.status_text.startswith("Pronađeno stanica:")
+
+        # debounce
         view.ids.query.text = "HRT1"
-        # pretraga je zakazana, ali jos nije pokrenuta
         assert view._pending is not None
+        assert _wait_until(lambda: [i.text for i in view.ids.results.children] == ["HRT 1"])
+    finally:
+        Window.remove_widget(root)
+
+
+class StubSchedule:
+    """Zamena za ScheduleService: nikad ne koristi mrezu."""
+
+    def __init__(self, outcome_factory, delay=0.0):
+        self.outcome_factory = outcome_factory
+        self.delay = delay
+        self.calls = []
+
+    def sources_for(self, channel):
+        return ["izvor"]
+
+    def provider_summary(self):
+        return [("tvprofil", "pending")]
+
+    def get_schedule(self, channel, sources=None, force=False):
         import time as _time
-        _time.sleep(0.4)
-        for _ in range(3):
+
+        self.calls.append(channel.catalog_id)
+        if self.delay:
+            _time.sleep(self.delay)
+        return self.outcome_factory(channel)
+
+
+def _outcome(channel, status="ok", **kwargs):
+    import datetime
+    from zoneinfo import ZoneInfo
+    from app.services.schedule_service import ScheduleEntry, ScheduleOutcome, ScheduleStatus
+
+    zone = ZoneInfo("Europe/Belgrade")
+
+    def at(hour, minute):
+        return datetime.datetime(2026, 11, 6, hour, minute, tzinfo=zone)
+
+    entries = ()
+    if status == "ok":
+        entries = (
+            ScheduleEntry(at(19, 30), at(20, 0), "Dnevnik", "Vesti dana", "Informativni"),
+            ScheduleEntry(at(20, 0), None, "Film", "Dugacak opis " * 20, None),
+        )
+    defaults = dict(
+        status=ScheduleStatus.OK if status == "ok" else ScheduleStatus[status.upper()],
+        channel=channel, source_name="TvProfil", license_status="pending",
+        timezone="Europe/Belgrade", zone_label="CET",
+        local_date=datetime.date(2026, 11, 6), entries=entries, fetched_at=1793990000,
+    )
+    defaults.update(kwargs)
+    return ScheduleOutcome(**defaults)
+
+
+def _select_rts1_serbia(view):
+    view.run_search("RTS 1")
+    item = next(i for i in view.ids.results.children
+                if i.text == "RTS 1" and "Serbia" in i.secondary_text)
+    item.dispatch("on_release")
+
+
+def test_schedule_is_shown_with_zone_source_and_license_note():
+    _needs_display()
+    from kivy.core.window import Window
+
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = StubSchedule(lambda channel: _outcome(channel))
+        _select_rts1_serbia(view)
+        assert view.in_schedule and "Učitavam raspored" in view.schedule_text
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        text = view.schedule_text
+        assert "Raspored: RTS 1 (Serbia)" in text
+        assert "Datum: 06.11.2026. · Zona: Europe/Belgrade (CET)" in text
+        assert "Izvor: TvProfil" in text
+        assert "Probna verzija: licenca izvora nije potvrđena." in text
+        rows = [(i.text, i.secondary_text) for i in reversed(view.ids.results.children)]
+        assert rows[0] == ("19:30-20:00  Dnevnik", "Informativni")
+        assert rows[1][0] == "20:00  Film" and rows[1][1].endswith("...") and len(rows[1][1]) == 90
+    finally:
+        Window.remove_widget(root)
+
+
+@pytest.mark.parametrize("status, extra, expected", [
+    ("network_error", {}, "nema veze"),
+    ("http_error", {"http_status": 404}, "greška 404"),
+    ("http_error", {"http_status": 500}, "grešku (500)"),
+    ("rate_limited", {}, "traži pauzu"),
+    ("empty", {}, "nema emisije"),
+    ("parse_error", {}, "nisu ispravni"),
+    ("zone_unavailable", {}, "zona stanice nije poznata"),
+    ("error", {}, "neočekivane greške"),
+    ("source_unavailable", {}, "nije dostupan u ovoj verziji"),
+    ("no_data_for_date", {}, "nema program za današnji datum (06.11.2026.)"),
+])
+def test_schedule_errors_are_explained_and_list_is_empty(status, extra, expected):
+    _needs_display()
+    from kivy.core.window import Window
+
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = StubSchedule(lambda channel: _outcome(channel, status, **extra))
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        assert expected in view.schedule_text
+        assert not view.ids.results.children
+    finally:
+        Window.remove_widget(root)
+
+
+def test_stale_schedule_says_why_refresh_failed():
+    _needs_display()
+    from kivy.core.window import Window
+    from app.services.schedule_service import ScheduleStatus
+
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = StubSchedule(lambda channel: _outcome(
+            channel, stale=True, error_status=ScheduleStatus.NETWORK_ERROR))
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        assert "Prikazani su stariji podaci. Osvežavanje nije uspelo: Raspored nije preuzet" in view.schedule_text
+        assert len(view.ids.results.children) == 2
+    finally:
+        Window.remove_widget(root)
+
+
+def test_crash_in_service_is_shown_as_error_not_raised():
+    _needs_display()
+    from kivy.core.window import Window
+
+    def boom(channel):
+        raise RuntimeError("neocekivano")
+
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = StubSchedule(boom)
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        assert "neočekivane greške" in view.schedule_text
+    finally:
+        Window.remove_widget(root)
+
+
+def test_late_answer_for_previous_channel_is_ignored():
+    _needs_display()
+    from kivy.core.window import Window
+
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = StubSchedule(lambda channel: _outcome(channel), delay=0.4)
+        _select_rts1_serbia(view)            # spor odgovor
+        view.show_results()                   # korisnik se vraca nazad pre odgovora
+        assert _wait_until(lambda: len(app.schedule_service.calls) == 1)
+        import time as _time
+        _time.sleep(0.6)
+        for _ in range(5):
+            from kivy.clock import Clock
             Clock.tick()
-        assert [i.text for i in view.ids.results.children] == ["HRT 1"]
+        assert not view.in_schedule and view.schedule_text == ""
+        assert all(not i.text.startswith("19:30") for i in view.ids.results.children)
     finally:
         Window.remove_widget(root)

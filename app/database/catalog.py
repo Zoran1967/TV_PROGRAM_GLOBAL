@@ -7,6 +7,7 @@ from typing import NamedTuple
 
 from app.database.schema import SCHEMA_VERSION
 from app.models.channel import Channel
+from app.models.schedule import ChannelSource
 
 _APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CATALOG_PATH = os.path.join(os.path.dirname(_APP_ROOT), "data", "catalog_seed.db")
@@ -16,7 +17,8 @@ _MAX_CHAR = "\U0010ffff"
 
 _SELECT = """
 SELECT c.id, c.catalog_id, c.name, c.country_code, co.name, c.network,
-       a.alias, MIN({score}) AS score
+       a.alias, MIN({score}) AS score,
+       (SELECT COUNT(*) FROM channel_source s WHERE s.channel_id = c.id)
 FROM channel_alias a
 JOIN channel c ON c.id = a.channel_id
 JOIN country co ON co.code = c.country_code
@@ -81,6 +83,16 @@ class CatalogDatabase:
     def channel_count(self):
         return self._connection.execute("SELECT COUNT(*) FROM channel").fetchone()[0]
 
+    def sources_for(self, channel_id):
+        """Izvori rasporeda za stanicu, od najviseg prioriteta (manji broj = viši)."""
+        rows = self._connection.execute(
+            "SELECT source_id, source_channel_id, timezone, days_available, priority"
+            " FROM channel_source WHERE channel_id = ?"
+            " ORDER BY priority, source_id",
+            (channel_id,),
+        ).fetchall()
+        return [ChannelSource(*row) for row in rows]
+
     def find(self, key, limit):
         """Trazi stanice po kljucu (vidi app.utils.text.normalize_key).
 
@@ -105,6 +117,7 @@ class CatalogDatabase:
                     country_code=row[3],
                     country_name=row[4],
                     network=row[5],
+                    source_count=row[8],
                 ),
                 row[6],
             )

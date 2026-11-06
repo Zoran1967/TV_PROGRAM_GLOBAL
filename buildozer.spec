@@ -13,13 +13,13 @@ version.regex = __version__ = ["'](.*)["']
 version.filename = %(source.dir)s/app/version.py
 
 # Python 3.11.6 + Kivy 2.3.1 + KivyMD 1.2.0 (vidi README, odeljak Verzije)
-requirements = python3==3.11.6,hostpython3==3.11.6,kivy==2.3.1,kivymd==1.2.0,pillow
+requirements = python3==3.11.6,hostpython3==3.11.6,kivy==2.3.1,kivymd==1.2.0,pillow,tzdata==2026.6
 
 orientation = portrait
 fullscreen = 0
 
-# Dozvole: u Fazi 2 nisu potrebne. INTERNET se dodaje u Fazi 4.
-# android.permissions =
+# Dozvole: samo INTERNET (preuzimanje rasporeda).
+android.permissions = INTERNET
 
 android.api = 36
 android.minapi = 24

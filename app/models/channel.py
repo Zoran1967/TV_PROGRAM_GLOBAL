@@ -12,6 +12,8 @@ class Channel:
     country_code: str
     country_name: str
     network: Optional[str] = None
+    # Broj izvora rasporeda povezanih sa ovom stanicom
+    source_count: int = 0
 
 
 @dataclass(frozen=True)
