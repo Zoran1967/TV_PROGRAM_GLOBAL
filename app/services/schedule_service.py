@@ -1,8 +1,9 @@
 """Raspored jedne stanice za danas, u vremenskoj zoni stanice.
 
 Servis ne koristi Kivy i ne dira UI. get_schedule() blokira dok traje mrezni
-zahtev, pa ga UI poziva iz pozadinske niti. Baza kataloga se cita samo kroz
-sources_for(), koji treba pozvati iz glavne niti (isti kao pretraga).
+zahtev, pa ga UI poziva iz pozadinske niti. refresh_view() nikad ne koristi mrezu:
+samo ponovo racuna prikaz (Sada/Sledece, promena dana) iz vec preuzetih podataka.
+Baza kataloga se cita samo kroz sources_for(), koji treba pozvati iz glavne niti.
 """
 
 import datetime
@@ -27,10 +28,15 @@ from app.providers.errors import (
     ZoneUnavailableError,
 )
 from app.providers.xmltv import load_zone
+from app.services.now_next import compute_now_next
 
 LOGGER = logging.getLogger(__name__)
 
 MAX_CACHE_ENTRIES = 50
+# Rucno osvezavanje ranije od ovoga koristi vec preuzete podatke (da se izvor ne opterecuje)
+MIN_MANUAL_REFRESH_SECONDS = 60
+# Rupa u rasporedu se prijavljuje tek kad je duza od ovoga
+MIN_GAP_SECONDS = 120
 
 
 class ScheduleStatus(Enum):
@@ -54,6 +60,12 @@ class ScheduleEntry:
     title: str
     description: Optional[str] = None
     category: Optional[str] = None
+    is_current: bool = False
+    is_next: bool = False
+    is_past: bool = False
+    # Ako posle ove emisije u rasporedu ima rupe, vreme kada se rupa zavrsava
+    # (pocinje u end)
+    gap_until: Optional[datetime.datetime] = None
 
 
 @dataclass(frozen=True)
@@ -66,13 +78,29 @@ class ScheduleOutcome:
     timezone: str = ""
     zone_label: str = ""
     local_date: Optional[datetime.date] = None
+    now_local: Optional[datetime.datetime] = None
     entries: Tuple[ScheduleEntry, ...] = field(default_factory=tuple)
+    # "Sada" i "Sledece" (racunato nad celim rasporedom, "Sledece" moze biti sutra)
+    current: Optional[ScheduleEntry] = None
+    current_end: Optional[datetime.datetime] = None
+    current_end_derived: bool = False
+    progress: Optional[float] = None
+    next: Optional[ScheduleEntry] = None
     fetched_at: Optional[int] = None
+    refresh_seconds: int = 0
     # Prikazani su stariji podaci jer osvezavanje nije uspelo
     stale: bool = False
     error_status: Optional[ScheduleStatus] = None
     http_status: Optional[int] = None
     detail: str = ""
+
+
+@dataclass
+class _CacheEntry:
+    fetched_at: int
+    programmes: list
+    # (status, http_status, tekst) poslednjeg neuspelog osvezavanja; None ako je uspelo
+    error: Optional[tuple] = None
 
 
 def _status_for(error):
@@ -96,7 +124,7 @@ class ScheduleService:
         self._catalog = catalog
         self._registry = registry
         self._clock = clock
-        self._cache = {}  # (source_id, source_channel_id) -> (fetched_at, programmes)
+        self._cache = {}  # (source_id, source_channel_id) -> _CacheEntry
         self._lock = threading.Lock()
 
     def provider_summary(self):
@@ -109,6 +137,7 @@ class ScheduleService:
         return self._catalog.sources_for(channel.id)
 
     def get_schedule(self, channel, sources=None, force=False):
+        """Vraca raspored; po potrebi preuzima podatke (blokira)."""
         if sources is None:
             sources = self.sources_for(channel)
         if not sources:
@@ -133,14 +162,36 @@ class ScheduleService:
             )
         return first_failure
 
+    def refresh_view(self, channel, sources):
+        """Ponovo racuna prikaz iz vec preuzetih podataka (bez mreze).
+
+        Vraca None ako za stanicu nema nista u kesu.
+        """
+        for source in sources or ():
+            provider = self._registry.get(source.source_id)
+            cached = self._cache_get((source.source_id, source.source_channel_id))
+            if provider is None or cached is None:
+                continue
+            try:
+                zone = load_zone(source.timezone)
+            except ZoneUnavailableError:
+                continue
+            return self._build(provider, channel, source, zone, cached, int(self._clock()))
+        return None
+
     # ------------------------------------------------------------------
+
+    def _base(self, provider, channel, source):
+        info = provider.info
+        return dict(
+            channel=channel, source_name=info.name, attribution=info.attribution_text,
+            license_status=info.license_status, timezone=source.timezone or "",
+            refresh_seconds=info.min_refresh_seconds,
+        )
 
     def _load_from(self, provider, channel, source, force):
         info = provider.info
-        base = dict(
-            channel=channel, source_name=info.name, attribution=info.attribution_text,
-            license_status=info.license_status, timezone=source.timezone or "",
-        )
+        base = self._base(provider, channel, source)
         try:
             zone = load_zone(source.timezone)
         except ZoneUnavailableError as error:
@@ -149,14 +200,17 @@ class ScheduleService:
         key = (source.source_id, source.source_channel_id)
         now = int(self._clock())
         cached = self._cache_get(key)
-        stale_error = None
-        if cached and not force and now - cached[0] < info.min_refresh_seconds:
-            fetched_at, programmes = cached
+        age = now - cached.fetched_at if cached else None
+        if cached and cached.error is None and age < (
+                MIN_MANUAL_REFRESH_SECONDS if force else info.min_refresh_seconds):
+            entry = cached  # svez kes (ili tek osvezeno rucno): bez mreze
         else:
             try:
-                programmes = provider.fetch_programmes(source)
-                fetched_at = now
-                self._cache_put(key, now, programmes)
+                # Adapter bi trebalo da vrati sortirano; ovde se to jos jednom obezbedjuje
+                programmes = sorted(provider.fetch_programmes(source),
+                                    key=lambda item: item.start_utc)
+                entry = _CacheEntry(now, programmes)
+                self._cache_put(key, entry)
             except ProviderError as error:
                 LOGGER.warning("Izvor %s, stanica %s: %s (%s)", info.id,
                                source.source_channel_id, error.code, error)
@@ -164,53 +218,91 @@ class ScheduleService:
                 http_status = getattr(error, "status", None)
                 if not cached:
                     return ScheduleOutcome(status, detail=str(error), http_status=http_status, **base)
-                fetched_at, programmes = cached
-                stale_error = (status, http_status, str(error))
+                entry = _CacheEntry(cached.fetched_at, cached.programmes,
+                                    (status, http_status, str(error)))
+                self._cache_put(key, entry)
             except Exception as error:  # neocekivana greska adaptera ne sme da sruši aplikaciju
                 LOGGER.exception("Neocekivana greska izvora %s", info.id)
                 return ScheduleOutcome(ScheduleStatus.ERROR, detail=str(error), **base)
+        return self._build(provider, channel, source, zone, entry, now)
 
-        entries, local_date, zone_label = self._entries_for_today(programmes, zone, now)
-        common = dict(base, local_date=local_date, zone_label=zone_label, fetched_at=fetched_at)
-        if stale_error:
-            common.update(stale=True, error_status=stale_error[0],
-                          http_status=stale_error[1], detail=stale_error[2])
-        if not entries:
-            return ScheduleOutcome(ScheduleStatus.NO_DATA_FOR_DATE, **common)
-        return ScheduleOutcome(ScheduleStatus.OK, entries=entries, **common)
-
-    @staticmethod
-    def _entries_for_today(programmes, zone, now):
+    def _build(self, provider, channel, source, zone, entry, now):
+        base = self._base(provider, channel, source)
+        programmes = entry.programmes
         local_now = datetime.datetime.fromtimestamp(now, zone)
         today = local_now.date()
+        common = dict(base, local_date=today, now_local=local_now,
+                      zone_label=local_now.tzname() or "", fetched_at=entry.fetched_at)
+        if entry.error:
+            common.update(stale=True, error_status=entry.error[0],
+                          http_status=entry.error[1], detail=entry.error[2])
+
+        state = compute_now_next(programmes, now)
+
+        def to_local(timestamp):
+            return datetime.datetime.fromtimestamp(timestamp, zone) if timestamp is not None else None
+
+        def entry_for(item, **flags):
+            return ScheduleEntry(
+                start=to_local(item.start_utc), end=to_local(item.end_utc),
+                title=item.title, description=item.description, category=item.category, **flags)
+
+        entries = self._entries_for_today(programmes, zone, now, today, state, entry_for)
+        extra = {}
+        if state.current is not None:
+            extra.update(
+                current=entry_for(state.current, is_current=True),
+                current_end=to_local(state.current_end_utc),
+                current_end_derived=state.current_end_derived,
+                progress=state.progress)
+        if state.next is not None:
+            extra["next"] = entry_for(state.next, is_next=True)
+        if not entries:
+            return ScheduleOutcome(ScheduleStatus.NO_DATA_FOR_DATE, **common, **extra)
+        return ScheduleOutcome(ScheduleStatus.OK, entries=entries, **common, **extra)
+
+    @staticmethod
+    def _entries_for_today(programmes, zone, now, today, state, entry_for):
         day_start = datetime.datetime.combine(today, datetime.time.min, tzinfo=zone)
         day_end = datetime.datetime.combine(
             today + datetime.timedelta(days=1), datetime.time.min, tzinfo=zone
         )
         start_utc, end_utc = int(day_start.timestamp()), int(day_end.timestamp())
-        entries = []
-        for item in programmes:
+        selected = []
+        for index, item in enumerate(programmes):
             if item.end_utc is not None:
                 overlaps = item.start_utc < end_utc and item.end_utc > start_utc
             else:
                 overlaps = start_utc <= item.start_utc < end_utc
-            if not overlaps:
-                continue
-            entries.append(ScheduleEntry(
-                start=datetime.datetime.fromtimestamp(item.start_utc, zone),
-                end=(datetime.datetime.fromtimestamp(item.end_utc, zone)
-                     if item.end_utc is not None else None),
-                title=item.title, description=item.description, category=item.category,
+            if overlaps:
+                selected.append((index, item))
+
+        entries = []
+        for index, item in selected:
+            following = programmes[index + 1] if index + 1 < len(programmes) else None
+            effective_end = item.end_utc
+            if effective_end is None and following is not None:
+                effective_end = following.start_utc
+            gap_until = None
+            if item.end_utc is not None and following is not None:
+                if following.start_utc - item.end_utc >= MIN_GAP_SECONDS:
+                    gap_until = datetime.datetime.fromtimestamp(following.start_utc, zone)
+            entries.append(entry_for(
+                item,
+                is_current=state.current is item,
+                is_next=state.next is item,
+                is_past=effective_end is not None and effective_end <= now,
+                gap_until=gap_until,
             ))
-        return tuple(entries), today, local_now.tzname() or ""
+        return tuple(entries)
 
     def _cache_get(self, key):
         with self._lock:
             return self._cache.get(key)
 
-    def _cache_put(self, key, fetched_at, programmes):
+    def _cache_put(self, key, entry):
         with self._lock:
-            self._cache[key] = (fetched_at, programmes)
+            self._cache[key] = entry
             while len(self._cache) > MAX_CACHE_ENTRIES:
-                oldest = min(self._cache, key=lambda k: self._cache[k][0])
+                oldest = min(self._cache, key=lambda k: self._cache[k].fetched_at)
                 del self._cache[oldest]

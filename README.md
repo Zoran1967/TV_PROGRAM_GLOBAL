@@ -3,10 +3,10 @@
 Android aplikacija (Python, Kivy/KivyMD) za pronalazenje TV stanica i njihovog dnevnog rasporeda.
 Aplikacija prikazuje TV rasporede, ne TV prenos.
 
-**Status: Faza 4 - povezivanje izvora rasporeda.** Pretraga radi nad ugradjenim katalogom stanica
-(bez interneta). Za 126 stanica sa Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna
-Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnje emisije.
-"Sada/Sledece" i lep prikaz dana stizu u Fazi 5, omiljeni i trajni kes u Fazi 6.
+**Status: Faza 5 - dnevni TV vodic.** Pretraga radi nad ugradjenim katalogom stanica (bez
+interneta). Za 126 stanica sa Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna
+Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnji program sa
+oznakama "Sada" i "Sledece". Omiljeni i trajni kes stizu u Fazi 6.
 
 ## Pretraga (Faza 3)
 
@@ -21,7 +21,7 @@ Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnje
 - Prvi rezultat se nikad ne bira automatski. Dodir na rezultat samo belezi izbor
   (prikaz rasporeda dolazi u narednim fazama).
 
-## Raspored (Faza 4)
+## Raspored i izvori (Faza 4)
 
 - Dodir na stanicu u rezultatima otvara raspored za danas u vremenskoj zoni stanice
   (datum, zona i izvor su ispisani; "Nazad na rezultate" vraca na pretragu).
@@ -49,6 +49,29 @@ Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnje
 - Novi izvor: novi adapter u `app/providers/`, unos u `ADAPTER_FACTORIES`
   (`app/providers/registry.py`) i u `data/providers.json`, plus veze stanica u katalogu
   (`channel_source`). Ekran i servisi se ne menjaju.
+
+## Dnevni vodic (Faza 5)
+
+- Zaglavlje: datum, zona stanice, **vreme u stanici**, "Sada" (sa krajem i preostalim vremenom),
+  "Sledece", izvor i **ažurnost** ("Ažurno, osvezeno 14:05, pre 3 min"; ako su podaci stariji od
+  roka osvezavanja izvora: "Podaci su stari ... Dodirnite Osvezi"; ako osvezavanje nije uspelo:
+  "stariji podaci" uz razlog).
+- Lista: sve emisije koje se preklapaju sa danasnjim danom, u vremenu stanice. Emisija koja je
+  pocela juce je oznacena ("juce 23:00-00:30"), a ona koja se zavrsava sutra ("23:30-01:30 (sutra)").
+  Trenutna emisija je istaknuta ("SADA"), sledeca ("SLEDECE"), zavrsene su prigusene. Lista se pri
+  otvaranju sama pomera na trenutnu emisiju.
+- Rupe u rasporedu (duze od 2 minuta) su prikazane kao "Nema podataka od 00:30 do 06:00".
+  Emisije bez opisa ili kategorije se prikazuju bez njih; ništa se ne dopisuje.
+- Pravila za "Sada/Sledece" (`app/services/now_next.py`): "Sada" je emisija koja je pocela i cije
+  vreme zavrsetka je poznato i jos nije proslo. Ako izvor ne daje kraj, kraj je pocetak sledece
+  emisije (naznaceno na ekranu). Poslednja emisija bez kraja se ne oznacava kao "Sada". Pri
+  preklapanju "Sada" je emisija koja je poslednja pocela. U rupi nema "Sada", a "Sledece" je
+  prva emisija koja tek pocinje. "Sledece" se racuna nad celim rasporedom, pa u 23:50 moze biti
+  emisija posle ponoci.
+- Vreme tece: na svakih 20 s se "Sada/Sledece" pomeraju bez interneta, a u ponoc se prelazi na
+  novi dan iz vec preuzetih podataka. Novo preuzimanje ide kad podaci isteknu ili kad prikaz
+  nije u redu (najcesce na 5 min).
+- Dugme "Osvezi" trazi nove podatke; ako su preuzeti pre manje od minut, koriste se oni.
 
 ## Katalog stanica
 
@@ -78,7 +101,8 @@ app/
   ui/main.kv                 izgled ekrana
   screens/search_view.py     ekran pretrage
   services/search_service.py pretraga (pravila, statusi)
-  services/schedule_service.py raspored za danas (kes u memoriji, greske, zona)
+  services/schedule_service.py raspored za danas (kes u memoriji, greske, zona, osvezavanje prikaza)
+  services/now_next.py       izracunavanje "Sada" i "Sledece"
   services/factory.py        pravi servise pri pokretanju
   providers/                 izvori rasporeda: base, tvprofil, xmltv, registry, errors
   net/http_client.py         preuzimanje (rok, ogranicenja, ponovni pokusaji)
@@ -138,8 +162,12 @@ ekrana rade samo kad postoji ekran (na racunaru) i u GitHub Actions se preskacu.
   korisnika; nije potvrdjena na pravom fajlu. Provera na telefonu: npr. dnevnik na RTS1 treba da
   bude u uobicajeno vreme (oko 19:30), ne sat ranije ili kasnije.
 - Pretraga ne pokazuje unapred koja stanica ima raspored; to se vidi tek posle dodira.
+- Izgled ekrana rasporeda (isticanje trenutne emisije, pomeranje liste, dugmad) proveren je samo
+  testovima na racunaru, ne na telefonu.
 - Nema trajnog kesa (Faza 6): kes je samo u memoriji tokom sesije.
-- Prikazuju se sve emisije koje se preklapaju sa danasnjim danom; "Sada/Sledece" dolazi u Fazi 5.
+- "Sada/Sledece" se racunaju iz sata na telefonu; pogresan sat telefona daje pogresne oznake
+  (aplikacija to ne proverava).
+- Izbor drugog datuma jos ne postoji (izvor daje samo narednih nekoliko dana).
 - Stanice van Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna Makedonija) nemaju
   izvor rasporeda. TvProfil kanali bez oznake drzave (sport, filmovi, vesti...) nisu povezani jer im
   zona nije odredjena.

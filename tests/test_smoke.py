@@ -237,6 +237,8 @@ class StubSchedule:
         self.outcome_factory = outcome_factory
         self.delay = delay
         self.calls = []
+        self.forces = []
+        self.view = None  # sta vraca refresh_view (None = nema nista u kesu)
 
     def sources_for(self, channel):
         return ["izvor"]
@@ -244,10 +246,14 @@ class StubSchedule:
     def provider_summary(self):
         return [("tvprofil", "pending")]
 
+    def refresh_view(self, channel, sources):
+        return self.view
+
     def get_schedule(self, channel, sources=None, force=False):
         import time as _time
 
         self.calls.append(channel.catalog_id)
+        self.forces.append(force)
         if self.delay:
             _time.sleep(self.delay)
         return self.outcome_factory(channel)
@@ -386,5 +392,233 @@ def test_late_answer_for_previous_channel_is_ignored():
             Clock.tick()
         assert not view.in_schedule and view.schedule_text == ""
         assert all(not i.text.startswith("19:30") for i in view.ids.results.children)
+    finally:
+        Window.remove_widget(root)
+
+
+
+# ---- Faza 5: formatiranje, Sada/Sledece na ekranu, osvezavanje prikaza ---------------
+
+class _T:
+    """Minimalna zamena aplikacije za funkcije formatiranja."""
+
+    @staticmethod
+    def t(key):
+        from app.strings import t as translate
+        return translate(key)
+
+
+@pytest.mark.parametrize("seconds, expected", [
+    (-5, "manje od minut"), (0, "manje od minut"), (59, "manje od minut"), (60, "1 min"),
+    (3599, "59 min"), (3600, "1 h"), (3660, "1 h 1 min"), (7325, "2 h 2 min"),
+])
+def test_format_age(seconds, expected):
+    pytest.importorskip("kivymd")
+    from app.screens.search_view import format_age
+
+    assert format_age(_T, seconds) == expected
+
+
+def test_time_range_marks_yesterday_and_tomorrow():
+    pytest.importorskip("kivymd")
+    import datetime
+    from zoneinfo import ZoneInfo
+    from app.screens.search_view import time_range
+    from app.services.schedule_service import ScheduleEntry
+
+    zone = ZoneInfo("Europe/Belgrade")
+
+    def at(day, hour, minute):
+        return datetime.datetime(2026, 11, day, hour, minute, tzinfo=zone)
+
+    today = datetime.date(2026, 11, 6)
+    assert time_range(_T, ScheduleEntry(at(5, 23, 0), at(6, 0, 30), "A"), today) == "juče 23:00-00:30"
+    assert time_range(_T, ScheduleEntry(at(6, 23, 30), at(7, 1, 30), "B"), today) == "23:30-01:30 (sutra)"
+    assert time_range(_T, ScheduleEntry(at(6, 10, 0), None, "C"), today) == "10:00"
+    assert time_range(_T, ScheduleEntry(at(6, 10, 0), at(6, 11, 0), "D"), today) == "10:00-11:00"
+
+
+def test_list_item_properties_used_for_styling_exist():
+    pytest.importorskip("kivymd")
+    from kivy.uix.scrollview import ScrollView
+    from kivymd.uix.list import OneLineListItem, TwoLineListItem
+
+    for name in ("bg_color", "theme_text_color", "secondary_theme_text_color"):
+        assert name in TwoLineListItem().properties(), name
+    assert "theme_text_color" in OneLineListItem().properties()
+    assert hasattr(ScrollView, "scroll_to")
+
+
+def _real_service(clock, provider):
+    from app.models.schedule import ChannelSource
+    from app.providers.registry import ProviderRegistry
+    from app.services.schedule_service import ScheduleService
+
+    class Catalog:
+        def sources_for(self, channel_id):
+            return [ChannelSource("tvprofil", "rts1.sr", "Europe/Belgrade", 7, 0)]
+
+    return ScheduleService(Catalog(), ProviderRegistry({"tvprofil": provider}), clock=clock)
+
+
+def _fake_provider(programmes, refresh=3600):
+    from app.providers.base import ProviderInfo, ScheduleProvider
+
+    class Fake(ScheduleProvider):
+        calls = 0
+
+        def fetch_programmes(self, source):
+            type(self).calls += 1
+            return list(programmes)
+
+    fake = Fake()
+    fake.info = ProviderInfo("tvprofil", "TvProfil", "pending", "x", "y", refresh)
+    return fake
+
+
+def _belgrade(*args):
+    import datetime
+    from zoneinfo import ZoneInfo
+
+    return int(datetime.datetime(*args, tzinfo=ZoneInfo("Europe/Belgrade")).timestamp())
+
+
+def _day_programmes():
+    from app.models.schedule import Programme
+
+    return [
+        Programme("Juce uvece", _belgrade(2026, 11, 5, 23, 0), _belgrade(2026, 11, 6, 0, 30)),
+        Programme("Jutro", _belgrade(2026, 11, 6, 6, 0), _belgrade(2026, 11, 6, 7, 0), "Opis jutra", "Informativni"),
+        Programme("Dnevnik", _belgrade(2026, 11, 6, 19, 30), _belgrade(2026, 11, 6, 20, 0)),
+        Programme("Nocni film", _belgrade(2026, 11, 6, 23, 30), _belgrade(2026, 11, 7, 1, 30)),
+    ]
+
+
+def test_now_next_gaps_and_freshness_on_screen_and_time_moves_without_network():
+    _needs_display()
+    from kivy.core.window import Window
+
+    class Clock:
+        now = _belgrade(2026, 11, 6, 19, 45)
+
+        def __call__(self):
+            return self.now
+
+    clock = Clock()
+    provider = _fake_provider(_day_programmes())
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = _real_service(clock, provider)
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        text = view.schedule_text
+        assert "Vreme u stanici: 19:45 (CET)" in text
+        assert "Sada: Dnevnik (do 20:00) · još 15 min" in text
+        assert "Sledeće: Nocni film u 23:30" in text
+        assert "Ažurno · osveženo 19:45 (pre manje od minut)" in text
+        rows = [i.text for i in reversed(view.ids.results.children)]
+        assert "juče 23:00-00:30  Juce uvece" in rows
+        assert "SADA  19:30-20:00  Dnevnik" in rows
+        assert "SLEDEĆE  23:30-01:30 (sutra)  Nocni film" in rows
+        assert rows.count("Nema podataka od 00:30 do 06:00") == 1
+        assert sum(1 for r in rows if r.startswith("Nema podataka od")) == 3
+        current_item = next(i for i in view.ids.results.children if i.text.startswith("SADA"))
+        assert current_item.secondary_text == "još 15 min"
+        assert list(current_item.bg_color)[3] > 0
+        past_item = next(i for i in view.ids.results.children if i.text.endswith("Jutro"))
+        assert past_item.theme_text_color == "Hint"
+
+        # protice vreme: Sada nestaje, Sledece ostaje; bez novog preuzimanja
+        clock.now = _belgrade(2026, 11, 6, 20, 5)
+        view._tick(0)
+        assert "Sada: nema emisije u rasporedu za ovaj trenutak." in view.schedule_text
+        assert "Sledeće: Nocni film u 23:30" in view.schedule_text
+        rows = [i.text for i in reversed(view.ids.results.children)]
+        assert not any(r.startswith("SADA") for r in rows)
+        assert any(r.startswith("SLEDEĆE") for r in rows)
+        assert type(provider).calls == 1
+
+        # ista minuta: lista se ne crta ponovo (ne skace skrol), zaglavlje se osvezava
+        before = list(view.ids.results.children)
+        clock.now += 20
+        view._tick(0)
+        assert list(view.ids.results.children) == before
+        assert "(pre 20 min)" in view.schedule_text or "(pre 21 min)" in view.schedule_text
+    finally:
+        Window.remove_widget(root)
+
+
+def test_midnight_switches_the_day_on_screen_without_network():
+    _needs_display()
+    from kivy.core.window import Window
+    from app.models.schedule import Programme
+
+    class Clock:
+        now = _belgrade(2026, 11, 6, 23, 58)
+
+        def __call__(self):
+            return self.now
+
+    programmes = _day_programmes() + [
+        Programme("Sutradan", _belgrade(2026, 11, 7, 8, 0), _belgrade(2026, 11, 7, 9, 0))]
+    clock = Clock()
+    provider = _fake_provider(programmes)
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = _real_service(clock, provider)
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        assert "Datum: 06.11.2026." in view.schedule_text
+        clock.now = _belgrade(2026, 11, 7, 0, 1)
+        view._tick(0)
+        assert "Datum: 07.11.2026." in view.schedule_text
+        assert "Sada: Nocni film (do 01:30) · još 1 h 29 min" in view.schedule_text
+        rows = [i.text for i in reversed(view.ids.results.children)]
+        assert rows[0] == "SADA  juče 23:30-01:30  Nocni film" or rows[0].startswith("SADA")
+        assert any(r.endswith("Sutradan") for r in rows)
+        assert type(provider).calls == 1
+    finally:
+        Window.remove_widget(root)
+
+
+def test_refresh_button_asks_for_new_data_and_tick_reload_is_throttled():
+    _needs_display()
+    from kivy.core.window import Window
+
+    app, root, view = _build_app_view()
+    try:
+        stub = StubSchedule(lambda channel: _outcome(channel, "network_error"))
+        app.schedule_service = stub
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        assert stub.forces == [False]
+
+        view._tick(0)                       # greska i nema kesa, ali je tek pokusano
+        assert stub.calls == ["RTS1.rs"]
+
+        view._last_reload -= 400            # proslo je vise od 5 minuta
+        view._tick(0)
+        assert _wait_until(lambda: len(stub.calls) == 2)
+
+        view.refresh_schedule()             # dugme Osvezi
+        assert _wait_until(lambda: len(stub.calls) == 3)
+        assert stub.forces == [False, False, True]
+    finally:
+        Window.remove_widget(root)
+
+
+def test_leaving_the_schedule_stops_the_clock_tick():
+    _needs_display()
+    from kivy.core.window import Window
+
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = StubSchedule(lambda channel: _outcome(channel))
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: view._tick_event is not None)
+        view.show_results()
+        assert view._tick_event is None and view._channel is None
+        view.run_search("RTS 1")
+        assert view._tick_event is None
     finally:
         Window.remove_widget(root)

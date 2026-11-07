@@ -186,12 +186,17 @@ def test_fresh_cache_is_reused_and_expired_cache_is_refreshed():
     assert not third.stale
 
 
-def test_force_refresh_ignores_cache():
-    provider = FakeProvider(DAY, refresh=600)
-    svc = service(provider)
+def test_manual_refresh_needs_a_pause_between_downloads():
+    provider = FakeProvider(DAY, refresh=3600)
+    clock = Clock(NOW)
+    svc = service(provider, clock=clock)
     svc.get_schedule(CHANNEL)
+    clock.now = NOW + 30
     svc.get_schedule(CHANNEL, force=True)
-    assert provider.calls == 2
+    assert provider.calls == 1            # prekratko: koristi se ono sto je preuzeto
+    clock.now = NOW + 61
+    svc.get_schedule(CHANNEL, force=True)
+    assert provider.calls == 2            # dovoljno vremena, iako je kes jos svez
 
 
 def test_failed_refresh_shows_stale_data_with_reason():
@@ -298,3 +303,158 @@ def test_concurrent_requests_do_not_break_the_cache():
     for thread in threads:
         thread.join()
     assert results == [ScheduleStatus.OK] * 12
+
+
+# ---- Faza 5: Sada/Sledece, rupe, promena dana, osvezavanje prikaza -----------------
+
+def hm(outcome_entry):
+    return (outcome_entry.start.hour, outcome_entry.start.minute)
+
+
+def test_now_and_next_are_marked_in_the_outcome_and_the_list():
+    provider = FakeProvider(DAY)
+    clock = Clock(local(2026, 11, 6, 19, 45))
+    outcome = service(provider, clock=clock).get_schedule(CHANNEL)
+    assert outcome.current.title == "Dnevnik" and outcome.current.is_current
+    assert outcome.current_end.hour == 20 and not outcome.current_end_derived
+    assert outcome.progress == pytest.approx(0.5)
+    assert outcome.next.title == "Nocni film" and outcome.next.is_next
+    flags = {e.title: (e.is_past, e.is_current, e.is_next) for e in outcome.entries}
+    assert flags == {
+        "Juce uvece": (True, False, False),
+        "Jutro": (True, False, False),
+        "Dnevnik": (False, True, False),
+        "Nocni film": (False, False, True),
+    }
+    assert outcome.now_local.hour == 19 and outcome.now_local.minute == 45
+
+
+def test_next_after_midnight_is_found_even_though_it_is_not_in_todays_list():
+    provider = FakeProvider([
+        Programme("Veceras", local(2026, 11, 6, 22, 0), local(2026, 11, 6, 23, 55)),
+        Programme("Posle ponoci", local(2026, 11, 7, 0, 5), local(2026, 11, 7, 1, 0)),
+    ])
+    outcome = service(provider, clock=Clock(local(2026, 11, 6, 23, 56))).get_schedule(CHANNEL)
+    assert outcome.current is None                    # rupa 23:55-00:05
+    assert outcome.next.title == "Posle ponoci"
+    assert [e.title for e in outcome.entries] == ["Veceras"]
+    assert outcome.entries[0].gap_until is not None and outcome.entries[0].is_past is True
+
+
+def test_no_now_when_time_is_outside_the_schedule():
+    provider = FakeProvider(DAY)
+    outcome = service(provider, clock=Clock(local(2026, 11, 6, 3, 0))).get_schedule(CHANNEL)
+    # 03:00: "Juce uvece" je zavrsena u 00:30, "Jutro" pocinje u 06:00
+    assert outcome.current is None and outcome.next.title == "Jutro"
+
+
+def test_programme_without_end_uses_next_start_and_says_so():
+    provider = FakeProvider([
+        Programme("A", local(2026, 11, 6, 10, 0), None),
+        Programme("B", local(2026, 11, 6, 12, 0), local(2026, 11, 6, 13, 0)),
+    ])
+    outcome = service(provider, clock=Clock(local(2026, 11, 6, 11, 0))).get_schedule(CHANNEL)
+    assert outcome.current.title == "A" and outcome.current_end_derived
+    assert outcome.current_end.hour == 12
+    assert outcome.entries[0].is_current and not outcome.entries[0].is_past
+    assert outcome.entries[0].gap_until is None  # kraj je nepoznat, pa se rupa ne tvrdi
+
+
+def test_gaps_are_reported_only_when_longer_than_two_minutes():
+    provider = FakeProvider([
+        Programme("A", local(2026, 11, 6, 10, 0), local(2026, 11, 6, 11, 0)),
+        Programme("B", local(2026, 11, 6, 11, 1), local(2026, 11, 6, 12, 0)),   # 1 min: nije rupa
+        Programme("C", local(2026, 11, 6, 12, 30), local(2026, 11, 6, 13, 0)),  # 30 min rupa
+    ])
+    outcome = service(provider).get_schedule(CHANNEL)
+    gaps = [(e.title, e.gap_until.hour, e.gap_until.minute) for e in outcome.entries if e.gap_until]
+    assert gaps == [("B", 12, 30)]
+
+
+def test_refresh_view_needs_cached_data():
+    provider = FakeProvider(DAY)
+    svc = service(provider)
+    assert svc.refresh_view(CHANNEL, [SOURCE]) is None
+    svc.get_schedule(CHANNEL)
+    assert svc.refresh_view(CHANNEL, [SOURCE]).status == ScheduleStatus.OK
+    assert provider.calls == 1
+
+
+def test_refresh_view_moves_now_forward_without_network():
+    provider = FakeProvider(DAY)
+    clock = Clock(local(2026, 11, 6, 19, 45))
+    svc = service(provider, clock=clock)
+    assert svc.get_schedule(CHANNEL).current.title == "Dnevnik"
+    clock.now = local(2026, 11, 6, 20, 5)
+    view = svc.refresh_view(CHANNEL, [SOURCE])
+    assert view.current is None and view.next.title == "Nocni film"
+    clock.now = local(2026, 11, 6, 23, 45)
+    assert svc.refresh_view(CHANNEL, [SOURCE]).current.title == "Nocni film"
+    assert provider.calls == 1
+
+
+def test_refresh_view_switches_to_the_next_day_at_midnight():
+    provider = FakeProvider(DAY + [Programme("Sutradan", local(2026, 11, 7, 8, 0), local(2026, 11, 7, 9, 0))])
+    clock = Clock(local(2026, 11, 6, 23, 59))
+    svc = service(provider, clock=clock)
+    first = svc.get_schedule(CHANNEL)
+    assert first.local_date == datetime.date(2026, 11, 6)
+    clock.now = local(2026, 11, 7, 0, 1)
+    view = svc.refresh_view(CHANNEL, [SOURCE])
+    assert view.local_date == datetime.date(2026, 11, 7)
+    assert [e.title for e in view.entries] == ["Nocni film", "Sutra", "Sutradan"]
+    assert view.current.title == "Nocni film"
+    assert provider.calls == 1
+
+
+def test_refresh_view_keeps_the_stale_flag_after_a_failed_refresh():
+    provider = FakeProvider(DAY, refresh=600)
+    clock = Clock(NOW)
+    svc = service(provider, clock=clock)
+    svc.get_schedule(CHANNEL)
+    provider.error = NetworkError("nema veze")
+    clock.now = NOW + 4000
+    assert svc.get_schedule(CHANNEL).stale
+    view = svc.refresh_view(CHANNEL, [SOURCE])
+    assert view.stale and view.error_status == ScheduleStatus.NETWORK_ERROR
+    assert provider.calls == 2
+
+
+def test_successful_refresh_clears_the_stale_flag():
+    provider = FakeProvider(DAY, refresh=600)
+    clock = Clock(NOW)
+    svc = service(provider, clock=clock)
+    svc.get_schedule(CHANNEL)
+    provider.error = NetworkError("nema veze")
+    clock.now = NOW + 4000
+    assert svc.get_schedule(CHANNEL).stale
+    provider.error = None
+    clock.now = NOW + 4100
+    outcome = svc.get_schedule(CHANNEL)
+    assert not outcome.stale and outcome.fetched_at == NOW + 4100
+
+
+def test_failed_refresh_is_retried_on_the_next_call_not_blocked_by_cache_age():
+    provider = FakeProvider(DAY, refresh=600)
+    clock = Clock(NOW)
+    svc = service(provider, clock=clock)
+    svc.get_schedule(CHANNEL)
+    provider.error = NetworkError("x")
+    clock.now = NOW + 4000
+    svc.get_schedule(CHANNEL)
+    svc.get_schedule(CHANNEL)
+    assert provider.calls == 3
+
+
+def test_refresh_view_ignores_unknown_zone_and_missing_provider():
+    provider = FakeProvider(DAY)
+    svc = service(provider)
+    svc.get_schedule(CHANNEL)
+    assert svc.refresh_view(CHANNEL, [ChannelSource("tvprofil", "rts1.sr", None, 7, 0)]) is None
+    assert svc.refresh_view(CHANNEL, [ChannelSource("nema", "x", "Europe/Belgrade", 7, 0)]) is None
+    assert svc.refresh_view(CHANNEL, None) is None
+
+
+def test_outcome_carries_refresh_interval_for_the_freshness_indicator():
+    outcome = service(FakeProvider(DAY, refresh=1234)).get_schedule(CHANNEL)
+    assert outcome.refresh_seconds == 1234
