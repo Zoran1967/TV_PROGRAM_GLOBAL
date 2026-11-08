@@ -1,0 +1,1 @@
+"""Lokalna baza podataka."""

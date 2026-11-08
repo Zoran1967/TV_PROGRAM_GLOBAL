@@ -1,0 +1,181 @@
+<SearchView>:
+    orientation: "vertical"
+    padding: dp(16), dp(8), dp(16), dp(8)
+    spacing: dp(8)
+
+    MDTextField:
+        id: query
+        hint_text: app.t("search_hint", app.language)
+        mode: "rectangle"
+        line_color_focus: app.colors["gold"]
+        hint_text_color_focus: app.colors["gold"]
+        on_text: root.schedule_search(self.text)
+
+    MDLabel:
+        text: root.status_text
+        theme_text_color: "Custom"
+        text_color: app.colors["text_muted"]
+        size_hint_y: None
+        height: self.texture_size[1] if self.text else 0
+
+    MDBoxLayout:
+        size_hint_y: None
+        height: dp(40) if root.in_schedule else 0
+        opacity: 1 if root.in_schedule else 0
+        spacing: dp(8)
+
+        MDFlatButton:
+            text: root.back_text
+            theme_text_color: "Custom"
+            text_color: app.colors["gold"]
+            disabled: not root.in_schedule
+            on_release: root.show_results()
+
+        MDFlatButton:
+            text: app.t("schedule_refresh", app.language)
+            theme_text_color: "Custom"
+            text_color: app.colors["gold"]
+            disabled: not root.in_schedule
+            on_release: root.refresh_schedule()
+
+        MDIconButton:
+            icon: root.favourite_icon
+            theme_icon_color: "Custom"
+            icon_color: app.colors["gold"]
+            disabled: not (root.in_schedule and root.favourites_enabled)
+            opacity: 1 if root.favourites_enabled else 0
+            on_release: root.toggle_favourite()
+
+    MDLabel:
+        text: root.schedule_text
+        theme_text_color: "Custom"
+        text_color: app.colors["gold"]
+        size_hint_y: None
+        height: self.texture_size[1] if self.text else 0
+
+    MDScrollView:
+        id: scroll
+
+        MDList:
+            id: results
+
+<FavouritesView>:
+    orientation: "vertical"
+    padding: dp(16), dp(8), dp(16), dp(8)
+    spacing: dp(8)
+
+    MDLabel:
+        text: app.t("favourites_title", app.language)
+        font_style: "H5"
+        theme_text_color: "Custom"
+        text_color: app.colors["gold"]
+        size_hint_y: None
+        height: self.texture_size[1]
+
+    MDLabel:
+        text: root.status_text
+        theme_text_color: "Custom"
+        text_color: app.colors["text_muted"]
+        size_hint_y: None
+        height: self.texture_size[1] if self.text else 0
+
+    MDScrollView:
+        MDList:
+            id: results
+
+<SettingsView>:
+    orientation: "vertical"
+
+    MDScrollView:
+
+        MDBoxLayout:
+            orientation: "vertical"
+            adaptive_height: True
+            padding: dp(16), dp(8), dp(16), dp(16)
+            spacing: dp(12)
+
+            MDLabel:
+                text: app.t("settings_title", app.language)
+                font_style: "H5"
+                theme_text_color: "Custom"
+                text_color: app.colors["gold"]
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            MDLabel:
+                text: root.note_text
+                theme_text_color: "Custom"
+                text_color: app.colors["text_muted"]
+                size_hint_y: None
+                height: self.texture_size[1] if self.text else 0
+
+            MDBoxLayout:
+                id: options
+                orientation: "vertical"
+                adaptive_height: True
+                spacing: dp(4)
+
+            MDLabel:
+                text: app.t("about_title", app.language)
+                font_style: "Subtitle1"
+                theme_text_color: "Custom"
+                text_color: app.colors["gold"]
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            MDLabel:
+                text: app.runtime_info
+                theme_text_color: "Custom"
+                text_color: app.colors["text_muted"]
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            MDLabel:
+                text: app.t("about_note", app.language)
+                theme_text_color: "Custom"
+                text_color: app.colors["text_muted"]
+                size_hint_y: None
+                height: self.texture_size[1]
+
+MDScreen:
+    md_bg_color: app.colors["navy"]
+
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: [0, app.inset_top, 0, app.inset_bottom]
+
+        MDTopAppBar:
+            title: app.t("app_title", app.language)
+            md_bg_color: app.colors["navy_light"]
+            specific_text_color: app.colors["gold"]
+            elevation: 0
+
+        MDBottomNavigation:
+            id: nav
+            panel_color: app.colors["navy_light"]
+            text_color_active: app.colors["gold"]
+            text_color_normal: app.colors["text_muted"]
+
+            MDBottomNavigationItem:
+                name: "search"
+                text: app.t("tab_search", app.language)
+                icon: "magnify"
+
+                SearchView:
+                    id: search_view
+
+            MDBottomNavigationItem:
+                name: "favourites"
+                text: app.t("tab_favourites", app.language)
+                icon: "star-outline"
+
+                FavouritesView:
+                    id: favourites_view
+
+            MDBottomNavigationItem:
+                name: "settings"
+                text: app.t("tab_settings", app.language)
+                icon: "cog-outline"
+
+                SettingsView:
+                    id: settings_view
