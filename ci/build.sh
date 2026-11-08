@@ -12,6 +12,32 @@ sudo apt-get install -y git zip unzip autoconf automake libtool \
 echo "=== Buildozer ==="
 python -m pip install buildozer==1.6.0 || exit 1
 
+echo "=== FreeType (rezervni izvori) ==="
+# python-for-android preuzima FreeType sa download.savannah.gnu.org, koji cesto vraca 502/504.
+# Ovde se isti fajl preuzima unapred (sa vise izvora), pa p4a koristi gotov folder (P4A_FREETYPE_DIR)
+# i ne preuzima nista sam. Ako nijedan izvor ne radi, izgradnja ide po starom (sama preuzima).
+FREETYPE_VERZIJA="2.14.1"
+FREETYPE_IZVORI=${FREETYPE_IZVORI:-"https://download.savannah.gnu.org/releases/freetype/freetype-$FREETYPE_VERZIJA.tar.gz https://download-mirror.savannah.gnu.org/releases/freetype/freetype-$FREETYPE_VERZIJA.tar.gz https://downloads.sourceforge.net/project/freetype/freetype2/$FREETYPE_VERZIJA/freetype-$FREETYPE_VERZIJA.tar.gz"}
+mkdir -p vendor
+for izvor in $FREETYPE_IZVORI; do
+  echo "Pokusavam: $izvor"
+  rm -f vendor/freetype.tar.gz
+  if curl -fL --retry 3 --retry-delay 5 --connect-timeout 20 --max-time 180 -o vendor/freetype.tar.gz "$izvor" \
+      && tar -tzf vendor/freetype.tar.gz > /dev/null 2>&1; then
+    rm -rf "vendor/freetype-$FREETYPE_VERZIJA"
+    tar -xzf vendor/freetype.tar.gz -C vendor
+    if [ -d "vendor/freetype-$FREETYPE_VERZIJA" ]; then
+      export P4A_FREETYPE_DIR="$PWD/vendor/freetype-$FREETYPE_VERZIJA"
+      echo "FreeType preuzet; koristi se $P4A_FREETYPE_DIR"
+      break
+    fi
+  fi
+  echo "Ovaj izvor ne radi."
+done
+if [ -z "${P4A_FREETYPE_DIR:-}" ]; then
+  echo "UPOZORENJE: FreeType nije preuzet unapred; p4a pokusava sam."
+fi
+
 echo "=== Izgradnja APK-a ==="
 # Preuzimanja biblioteka sa GitHub-a povremeno padnu (npr. HTTP 504); tada se pokusava ponovo.
 for pokusaj in 1 2 3; do
@@ -21,8 +47,8 @@ for pokusaj in 1 2 3; do
     break
   fi
   if [ "$pokusaj" -lt 3 ] && grep -qE "Gateway Time-out|Download failed|Connection (reset|aborted)|timed out|Temporary failure" build.log; then
-    echo "Greska pri preuzimanju (pokusaj $pokusaj od 3). Ponovo za 30 s..."
-    sleep 30
+    echo "Greska pri preuzimanju (pokusaj $pokusaj od 3). Ponovo za 60 s..."
+    sleep 60
   else
     break
   fi

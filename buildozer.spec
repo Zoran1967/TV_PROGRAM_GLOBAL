@@ -6,7 +6,7 @@ package.domain = org.vukica
 
 source.dir = .
 source.include_exts = py,kv,png,jpg,json,ttf,db
-source.exclude_dirs = tests,bin,docs,.github,.buildozer,tools
+source.exclude_dirs = tests,bin,docs,.github,.buildozer,tools,vendor
 
 # Verzija se cita iz app/version.py (jedino mesto za izmenu verzije)
 version.regex = __version__ = ["'](.*)["']
