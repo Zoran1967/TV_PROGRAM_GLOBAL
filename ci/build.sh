@@ -40,15 +40,15 @@ fi
 
 echo "=== Izgradnja APK-a ==="
 # Preuzimanja biblioteka sa GitHub-a povremeno padnu (npr. HTTP 504); tada se pokusava ponovo.
-for pokusaj in 1 2 3; do
+for pokusaj in 1 2 3 4 5 6 7 8; do
   buildozer -v android debug 2>&1 | tee build.log
   status=${PIPESTATUS[0]}
   if [ "$status" -eq 0 ]; then
     break
   fi
-  if [ "$pokusaj" -lt 3 ] && grep -qE "Gateway Time-out|Download failed|Connection (reset|aborted)|timed out|Temporary failure" build.log; then
-    echo "Greska pri preuzimanju (pokusaj $pokusaj od 3). Ponovo za 60 s..."
-    sleep 60
+  if [ "$pokusaj" -lt 8 ] && grep -qE "Gateway Time-out|Download failed|Connection (reset|aborted)|timed out|Temporary failure" build.log; then
+    echo "Greska pri preuzimanju (pokusaj $pokusaj od 8). Ponovo za 20 s..."
+    sleep 20
   else
     break
   fi
