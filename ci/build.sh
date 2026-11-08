@@ -41,8 +41,8 @@ fi
 echo "=== Biblioteke (rezervni izvori) ==="
 # python-for-android preuzima OpenSSL sa www.openssl.org i SDL2_mixer sa GitHub-a; oba cesto vrate 504.
 # Ovde se fajl preuzima unapred (sa vise izvora) u kes koji p4a vec koristi
-# (~/.buildozer/android/packages/<recept>/). Ako je fajl tamo, p4a ga ne preuzima ponovo.
-PAKETI_DIR="$HOME/.buildozer/android/packages"
+# (.buildozer/android/platform/build-arm64-v8a/packages/<recept>/). Ako je fajl tamo, p4a ga ne preuzima ponovo.
+PAKETI_DIR="$PWD/.buildozer/android/platform/build-arm64-v8a/packages"
 pripremi_paket() {
   local recept="$1"; shift
   local ime; ime=$(basename "$1")
@@ -66,6 +66,8 @@ pripremi_paket() {
 # Verzije moraju da se poklapaju sa verzijama u python-for-android grani iz buildozer.spec.
 pripremi_paket openssl \
   "https://www.openssl.org/source/openssl-3.3.1.tar.gz" \
+  "https://ftp.openssl.org/source/openssl-3.3.1.tar.gz" \
+  "https://github.com/openssl/openssl/archive/refs/tags/openssl-3.3.1.tar.gz" \
   "https://github.com/openssl/openssl/releases/download/openssl-3.3.1/openssl-3.3.1.tar.gz"
 pripremi_paket sdl2_mixer \
   "https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.6.3/SDL2_mixer-2.6.3.tar.gz" \
