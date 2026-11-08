@@ -251,6 +251,10 @@ tests/                       testovi
 5. Nova verzija se instalira preko stare (ostaju omiljene i podesavanja), ali samo ako je potpisana
    istim kljucem kao stara. Debug APK-ovi iz GitHub Actions nemaju stalan kljuc: ako instalacija preko
    stare javi gresku, prvo ukloni staru aplikaciju (tada se brisu omiljene).
+   Od verzije 0.7.3 debug APK se potpisuje stalnim kljucem iz `ci/stalni_kljuc.b64` (obican debug kljuc,
+   lozinka `android`, bez tajni; ko ima repozitorijum moze da potpise APK tim kljucem). Aplikaciju
+   koja je instalirana pre toga treba ukloniti JEDNOM; posle toga se svaka nova verzija instalira preko
+   stare i omiljene ostaju. Verzija u `app/version.py` mora da raste pri svakoj izgradnji.
 
 **Potpisivanje (neobavezno)**
 

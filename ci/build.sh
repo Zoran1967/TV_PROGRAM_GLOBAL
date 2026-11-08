@@ -98,6 +98,23 @@ else
   echo "Kljuc nije podesen: gradi se debug APK (potpisan privremenim debug kljucem)."
 fi
 
+echo "=== Stalni kljuc za debug APK ==="
+# Debug APK se inace potpisuje novim, slucajnim kljucem pri svakoj izgradnji, pa se nova verzija ne
+# moze instalirati preko stare (mora da se brise aplikacija i gube omiljene). Ako postoji
+# ci/stalni_kljuc.b64, gradle ga koristi kao debug kljuc: svaki APK je potpisan istim kljucem i
+# instalira se preko stare verzije. Verzija u app/version.py mora stalno da raste.
+if [ "$REZIM" = "debug" ] && [ -f ci/stalni_kljuc.b64 ]; then
+  mkdir -p "$HOME/.android"
+  if base64 -d ci/stalni_kljuc.b64 > "$HOME/.android/debug.keystore" 2>/dev/null && [ -s "$HOME/.android/debug.keystore" ]; then
+    echo "Debug APK se potpisuje stalnim kljucem (ci/stalni_kljuc.b64)."
+  else
+    rm -f "$HOME/.android/debug.keystore"
+    echo "UPOZORENJE: ci/stalni_kljuc.b64 nije ispravan; debug APK dobija privremeni kljuc."
+  fi
+else
+  echo "Nema ci/stalni_kljuc.b64 ili je release rezim: kljuc se ne menja."
+fi
+
 echo "=== Izgradnja APK-a ==="
 # Preuzimanja biblioteka sa GitHub-a povremeno padnu (npr. HTTP 504); tada se pokusava ponovo.
 for pokusaj in 1 2 3 4 5 6 7 8 9 10; do
