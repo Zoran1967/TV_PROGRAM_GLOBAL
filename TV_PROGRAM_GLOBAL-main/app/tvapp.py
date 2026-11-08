@@ -195,6 +195,14 @@ class TvProgramGlobalApp(MDApp):
         Builder.unload_file(KV_PATH)  # ne dozvoljava dvostruko ucitavanje pravila
         return Builder.load_file(KV_PATH)
 
+    def on_pause(self):
+        """Android: bez ovoga se aplikacija zatvara cim korisnik predje na drugu aplikaciju."""
+        return True
+
+    def on_resume(self):
+        self._device_zone = None  # putnik je mozda promenio zonu dok je aplikacija bila u pozadini
+        self.ui_version += 1  # ponovo crta prikaz (Sada/Sledece, vreme) sa tacnim satom
+
     def on_start(self):
         self._restart_inset_updates(0)
 

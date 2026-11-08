@@ -3,7 +3,7 @@
 Android aplikacija (Python, Kivy/KivyMD) za pronalazenje TV stanica i njihovog dnevnog rasporeda.
 Aplikacija prikazuje TV rasporede, ne TV prenos.
 
-**Status: Faza 7 - podesavanja i lokalizacija.** Pretraga radi nad ugradjenim katalogom stanica (bez
+**Status: Faza 8 - testiranje i stabilizacija.** Pretraga radi nad ugradjenim katalogom stanica (bez
 interneta). Za 126 stanica sa Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna
 Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnji program sa
 oznakama "Sada" i "Sledece". Omiljene stanice i poslednji preuzeti raspored ostaju sacuvani i
@@ -111,6 +111,32 @@ Kartica **Podesavanja**: dodir na opciju je odmah primenjuje i trajno cuva (tabe
   Rok izvora se ne moze skratiti. "Samo rucno": nema automatskog preuzimanja, dugme "Osvezi" radi,
   "Sada/Sledece" se i dalje pomera bez interneta, a stariji podaci su oznaceni.
 - Ako trajno cuvanje ne radi, podesavanja vaze do zatvaranja aplikacije i ekran to kaze.
+
+## Testiranje i stabilizacija (Faza 8)
+
+Sta je proveravano (testovi na racunaru, `tests/`):
+
+- Mreza: nema veze, odbijena veza, prekinut odgovor, rok, spor server (ukupni rok), 404/5xx/429,
+  prazan odgovor, prevelik odgovor, gzip bomba, preusmeravanje na http.
+- Losi podaci: pokvaren i prazan XML, nepoznato kodiranje, definicije entiteta (i u UTF-16), losa vremena,
+  emisije bez naslova, 1500 nasumicno ostecenih fajlova (sme da izadje samo greska izvora, nikad pad).
+  Pretraga je provereno otporna na 3000 nasumicnih ulaza (navodnici, nulti znak, emoji, mnogo znakova).
+- Kes: ostecena i buduca baza, kes starih podataka, ponovno pokretanje, politika osvezavanja.
+
+Pronadjeno i ispravljeno:
+
+- **Aplikacija se zatvarala cim korisnik predje na drugu aplikaciju** (nedostajao `on_pause`).
+  Sada ostaje u pozadini, a pri povratku se prikaz ponovo racuna.
+- XML sa nepoznatim kodiranjem je davao opstu gresku umesto poruke "podaci nisu ispravni".
+- Definicija entiteta u UTF-16 ili malim slovima je zaobilazila zabranu.
+- Naslov/opis bez ogranicenja duzine: sada najvise 300 / 3000 / 100 znakova (kategorija), sa "...".
+
+Poznata ogranicenja:
+
+- Najgori slucaj sporog interneta: do tri pokusaja po 40 s (oko 2 minuta) pre poruke o gresci.
+  Ekran pokazuje "Ucitavam raspored..."; moze se napustiti, a zakasneli odgovor se ne prikazuje.
+- Razlicite velicine ekrana (mali telefoni, tablet, landscape) nisu proveravane, jer okruzenje nema Kivy.
+  Aplikacija je zakljucana na portret. Treba proveriti na telefonu.
 
 ## Katalog stanica
 
