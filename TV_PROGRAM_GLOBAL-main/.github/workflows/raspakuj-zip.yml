@@ -1,0 +1,58 @@
+name: Raspakuj ZIP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "*.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: raspakuj-zip
+  cancel-in-progress: false
+
+jobs:
+  raspakuj:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preuzmi kod
+        uses: actions/checkout@v4
+
+      - name: Raspakuj ZIP fajlove
+        run: |
+          shopt -s nullglob
+          fajlovi=(*.zip)
+          if [ ${#fajlovi[@]} -eq 0 ]; then
+            echo "Nema ZIP fajlova u korenu repozitorijuma."
+            exit 0
+          fi
+          for z in "${fajlovi[@]}"; do
+            echo "Raspakujem: $z"
+            unzip -o "$z" -x '.git/*' '.github/*' '__MACOSX/*'
+            git rm -f --quiet "$z"
+          done
+
+      - name: Snimi promene
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nema promena."
+            exit 0
+          fi
+          git commit -m "Raspakovan ZIP"
+          git pull --rebase
+          git push
+
+      - name: Pokreni izgradnju APK-a
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f .github/workflows/build-apk.yml ]; then
+            gh workflow run build-apk.yml
+          fi

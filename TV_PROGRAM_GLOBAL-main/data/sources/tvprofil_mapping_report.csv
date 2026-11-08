@@ -1,0 +1,221 @@
+xmltv_id,name,days_available,status,catalog_id
+a1-hd.ba,A1 HD,4,bez_poklapanja,
+atlas.cg,A1 TV,7,bez_poklapanja,
+bdc-tv.ba,BDC TV,3,bez_poklapanja,
+bit-tv.sr,Bit TV,6,bez_poklapanja,
+bn-sat.ba,BN SAT,7,bez_poklapanja,
+cakovec.hr,SrceTV,6,bez_poklapanja,
+euroturist-tv.si,Euroturist TV,7,bez_poklapanja,
+fulltv.hr,FullTV,2,bez_poklapanja,
+htv5.hr,HTV5,7,bez_poklapanja,
+in-televizija.ba,IN Televizija,4,bez_poklapanja,
+jabukatv.hr,JabukaTV,7,bez_poklapanja,
+kanal-25.sr,Kanal 25,6,bez_poklapanja,
+kiss.mk,KISS,7,bez_poklapanja,
+kopernikus.sr,Kopernikus,5,bez_poklapanja,
+maribor.si,Maribor,7,bez_poklapanja,
+nasa-tv-ba.ba,Naša TV,4,bez_poklapanja,
+net.hr,MrežaZG,7,bez_poklapanja,
+ntv-101.ba,NTV 101,7,bez_poklapanja,
+ntv-jasmin.ba,NTV Jasmin,7,bez_poklapanja,
+osm-tv.ba,OSM TV,7,bez_poklapanja,
+panonija.sr,Panonija,7,bez_poklapanja,
+pink-2.sr,PINK 2,7,bez_poklapanja,
+pink-3.sr,PINK 3 Info,2,bez_poklapanja,
+pink-ha-ha.sr,Pink Ha Ha,5,bez_poklapanja,
+pink-lol.sr,Pink LOL,7,bez_poklapanja,
+pink-parada.sr,Pink Parada,2,bez_poklapanja,
+planet-2.si,Planet 2,3,bez_poklapanja,
+prva-tv-cg.cg,Prva TV CG,7,bez_poklapanja,
+rtv-bpk-gorazde.ba,TV Goražde,7,bez_poklapanja,
+rtv-slon.ba,RTV Slon,7,bez_poklapanja,
+rtv-ze.ba,RTV ZE,7,bez_poklapanja,
+sabac-tv.sr,Šabac TV,2,bez_poklapanja,
+slavonska-tv.hr,Slavonska TV,7,bez_poklapanja,
+slobomir.ba,Slobomir,7,bez_poklapanja,
+smart-tv.ba,Smart TV,1,bez_poklapanja,
+sntv.sr,SNTV,6,bez_poklapanja,
+sos.sr,SOS,2,bez_poklapanja,
+sportska-televizija.hr,SPTV,7,bez_poklapanja,
+svet-plus.sr,Svet Plus,5,bez_poklapanja,
+televizija-alfa.ba,TV Alfa,3,bez_poklapanja,
+tnt-kids.ba,TNT Kids,7,bez_poklapanja,
+tv-arena-bijeljina.ba,TV Arena Bijeljina,5,bez_poklapanja,
+tv-dalmacija.hr,MrežaST,6,bez_poklapanja,
+tv-istocno-sarajevo.ba,TVIS,4,bez_poklapanja,
+tv-istra.hr,TV Istra,7,bez_poklapanja,
+tv-kiss.ba,TV Kiss,7,bez_poklapanja,
+tv-lotel.sr,TV Lotel,7,bez_poklapanja,
+tv-veseljak.si,TV Veseljak,6,bez_poklapanja,
+tv1-mreza.ba,TV1 Mreža,7,bez_poklapanja,
+tv4r.hr,TV4R,7,bez_poklapanja,
+ultra-tv.sr,TV Ultra,7,bez_poklapanja,
+varazdinska-tv.hr,Varaždinska TV,6,bez_poklapanja,
+vikom.ba,Vikom,3,bez_poklapanja,
+vinkovacka-tv.hr,Vinkovačka TV,7,bez_poklapanja,
+vojvodina-1.sr,RT Vojvodina 1,6,bez_poklapanja,
+vojvodina-2.sr,RT Vojvodina 2,6,bez_poklapanja,
+vtv-valjevo.sr,VTV Valjevo,4,bez_poklapanja,
+zdrava-televizija.hr,Zdrava televizija,1,bez_poklapanja,
+zenska-tv.sr,Ženska TV,4,bez_poklapanja,
+24vesti.mk,24Vesti,0,izvor_nema_podataka,
+alfa-tv.mk,ALFA TV,0,izvor_nema_podataka,
+alsat-m.mk,ALSAT-M,0,izvor_nema_podataka,
+bel-kanal.ba,BEL kanal,0,izvor_nema_podataka,
+herceg-tv.ba,Herceg TV,0,izvor_nema_podataka,
+htv-oscar-c.ba,HTV Oscar C,0,izvor_nema_podataka,
+kanal5-plus.mk,Kanal5 plus,0,izvor_nema_podataka,
+ktv-zrenjanin.sr,KTV Zrenjanin,0,izvor_nema_podataka,
+moja-tv.sr,Moja TV,0,izvor_nema_podataka,
+mtm.mk,MTM,0,izvor_nema_podataka,
+nasa-tv-mk.mk,Naša TV MK,0,izvor_nema_podataka,
+novi-pazar.sr,Novi Pazar,0,izvor_nema_podataka,
+ritv.hr,RITV,0,izvor_nema_podataka,
+rts-si.si,RTS.si,0,izvor_nema_podataka,
+rtv-bostel.ba,RTV Bostel,0,izvor_nema_podataka,
+sitel-3.mk,Sitel 3,0,izvor_nema_podataka,
+sky-net.mk,Sky Net,0,izvor_nema_podataka,
+star-tv.sr,Star TV,0,izvor_nema_podataka,
+televizioni-koha.mk,TV Koha,0,izvor_nema_podataka,
+telma.mk,Telma,0,izvor_nema_podataka,
+tms.sr,TMS,0,izvor_nema_podataka,
+tv-arena.si,TV Arena,0,izvor_nema_podataka,
+tv-edo.mk,TV Edo,0,izvor_nema_podataka,
+tv-hram.sr,TV Hram,0,izvor_nema_podataka,
+tv-idea.si,TV Idea,0,izvor_nema_podataka,
+tv-iris-makedonia.mk,TV Iris,0,izvor_nema_podataka,
+tv-m.mk,TV M,0,izvor_nema_podataka,
+tv-orbis-bitola.mk,Orbis,0,izvor_nema_podataka,
+tv-sibenik.hr,TV Šibenik,0,izvor_nema_podataka,
+tv-sonce.mk,TV Sonce,0,izvor_nema_podataka,
+tv-visoko.ba,TV Visoko,0,izvor_nema_podataka,
+agro-tv.sr,Agro TV,6,povezano,AgroTV.rs
+atv.ba,ATV,5,povezano,ATV.ba
+b92.sr,O2,7,povezano,B92.rs
+balkan-tv.sr,Balkan TV,7,povezano,BalkanTV.rs
+behar-tv.ba,Behar TV,7,povezano,BeharTV.ba
+belle-amie.sr,Belle Amie,7,povezano,BelleAmie.rs
+bht1.ba,BHT1,7,povezano,BHT1.ba
+bk-tv.si,BK TV,7,povezano,BKTV.si
+bn.ba,BN,7,povezano,BNTV.ba
+city-tv.ba,City TV,3,povezano,CityTV.ba
+doma-tv.hr,Doma TV,7,povezano,DomaTV.hr
+dubrovacka-tv.hr,DUTV,7,povezano,DUTV.hr
+elta-2.ba,Elta 2,5,povezano,ELTA2.ba
+elta-tv.ba,Elta 1 HD,5,povezano,ELTA1HD.ba
+face-tv.ba,FACE TV,7,povezano,FACETV.ba
+ftv.ba,FTV,4,povezano,Federalnatelevizija.ba
+gea-tv.si,GEA TV,7,povezano,GeaTV.si
+gold-tv.si,Gold TV,3,povezano,GOLDTV.si
+happytv.sr,HappyTV,7,povezano,Happy.rs
+hayat-plus.ba,Hayat Plus,7,povezano,HayatPlus.ba
+hayat-tv.ba,Hayat TV,7,povezano,Hayat.ba
+hema-tv.ba,HEMA TV,6,povezano,HemaTV.ba
+hntv.hr,HNTV,7,povezano,HNTV.hr
+htv1.hr,HTV1,7,povezano,HRT1.hr
+htv2.hr,HTV2,7,povezano,HRT2.hr
+htv3.hr,HTV3,7,povezano,HRT3.hr
+htv4.hr,HTV4,7,povezano,HRT4.hr
+kanal-3-prnjavor.ba,K3,7,povezano,K3.ba
+kanal-6.ba,Kanal 6,7,povezano,Kanal6.ba
+kanal-9.sr,Kanal 9,4,povezano,TVKanal9.rs
+kanal-a.si,KANAL A,7,povezano,KanalA.si
+kanal-ri.hr,Kanal-Ri,3,povezano,KanalRi.hr
+kanal5.mk,Kanal5,2,povezano,Kanal5.mk
+kanal8.mk,Kanal8,7,povezano,Kanal8.mk
+kitchentv.sr,KitchenTV,7,povezano,KitchenTV.rs
+koper.si,Koper,5,povezano,TVKoperCapodistria.si
+laudato-tv.hr,Laudato TV,2,povezano,LaudatoTV.hr
+mrt1.mk,MRT1,7,povezano,MRT1.mk
+mrt2.mk,MRT2,7,povezano,MRT2.mk
+mtv-igman.ba,MTV Igman,7,povezano,MTVIgman.ba
+net-tv.si,Net TV,7,povezano,NetTV.si
+nova-24tv.si,NOVA 24TV,6,povezano,Nova24TV.si
+nova-world.hr,Nova World,5,povezano,NovaWorld.hr
+nova.hr,NOVA TV,7,povezano,NovaTV.hr
+novosadska-tv.sr,Novosadska TV,4,povezano,NovosadskaTV.rs
+ntv-ic.ba,NTV IC,2,povezano,NTVIC.ba
+obn.ba,OBN,7,povezano,OBN.ba
+ostv.hr,Osječka TV,7,povezano,Osjecketelevizije.hr
+otv-valentino.ba,OTV Valentino,7,povezano,OTVValentino.ba
+pink-extra.sr,PINK EXTRA,5,povezano,PinkExtra.rs
+pink-family.sr,PINK Family,7,povezano,PinkFamily.rs
+pink-fashion.sr,Pink Fashion,1,povezano,PinkFashion.rs
+pink-kuvar.sr,Pink Kuvar,6,povezano,PinkKuvar.rs
+pink-plus.sr,PINK PLUS,7,povezano,PinkPlus.rs
+pink-reality.sr,Pink Reality,5,povezano,PinkReality.rs
+pink-serije.sr,Pink Serije,7,povezano,PinkSerije.rs
+pink-show.sr,Pink Show,7,povezano,PinkShow.rs
+pink-soap.sr,Pink Soap,5,povezano,PinkSoap.rs
+pink-style.sr,Pink Style,5,povezano,PinkStyle.rs
+pink-world.sr,PINK World,6,povezano,PinkWorld.rs
+pink-zabava.sr,PINK Zabava,7,povezano,PinkZabava.rs
+pink.sr,PINK,7,povezano,Pink.rs
+planettv.si,PlanetTV,7,povezano,PlanetTV.si
+poljoprivredna-tv.hr,Poljoprivredna TV,7,povezano,PoljoprivrednaTV.hr
+pop-brio.si,BRIO,7,povezano,BRIO.si
+pop-kino.si,KINO,7,povezano,KINO.si
+pop-oto.si,OTO,7,povezano,OTO.si
+pop-tv.si,POP TV,7,povezano,POPTV.si
+prva-files.sr,Prva FILES,7,povezano,PrvaFiles.rs
+prva-kick.sr,Prva KICK,6,povezano,PrvaKick.rs
+prva-life.sr,Prva LIFE,7,povezano,PrvaLife.rs
+prva-max.sr,Prva MAX,6,povezano,PrvaMax.rs
+prva-plus.sr,Prva Plus,6,povezano,PrvaPlus.rs
+prva-srpska-tv.sr,Prva,6,povezano,Prva.rs
+prva-world.sr,Prva World,6,povezano,PrvaWorld.rs
+rtl-crime.hr,RTL Crime,7,povezano,RTLCrime.hr
+rtl-croworld.hr,RTL Croatia World,7,povezano,RTLCroatiaWorld.hr
+rtl-kockica.hr,RTL Kockica,7,povezano,RTLKockica.hr
+rtl-living.hr,RTL Living,7,povezano,RTLLiving.hr
+rtl-passion.hr,RTL Passion,7,povezano,RTLPassion.hr
+rtl.hr,RTL,7,povezano,RTL.hr
+rtl2.hr,RTL2,7,povezano,RTL2.hr
+rtrs-plus.ba,RTRS PLUS,7,povezano,RTRSplus.ba
+rtrs.ba,RTRS,7,povezano,RTRSTV.ba
+rts-digital.sr,RTS3,5,povezano,RTS3.rs
+rts-drama.sr,RTS Drama,7,povezano,RTSDrama.rs
+rts-kolo.sr,RTS Kolo,7,povezano,RTSKolo.rs
+rts-muzika.sr,RTS Muzika,7,povezano,RTSMuzika.rs
+rts-poletarac.sr,RTS Poletarac,6,povezano,RTSPoletarac.rs
+rts-sat.sr,RTS SAT,4,povezano,RTSSvet.rs
+rts-trezor.sr,RTS Trezor,7,povezano,RTSTrezor.rs
+rts-zivot.sr,RTS Život,7,povezano,RTSZivot.rs
+rts1.sr,RTS1,7,povezano,RTS1.rs
+rts2.sr,RTS2,6,povezano,RTS2.rs
+rtv-budva.cg,RTV Budva,7,povezano,RTVBudva.me
+rtv-hit.ba,RTV HIT,5,povezano,HITTelevizija.ba
+rtv-usk.ba,RTV USK,7,povezano,RTVUSK.ba
+rtv-vogosca.ba,RTV Vogošća,7,povezano,RadioTelevizijaVogosca.ba
+rtvtk.ba,RTVTK,7,povezano,RTVTK.ba
+sbtv.hr,SBTV,5,povezano,SBTV.hr
+sevdah-tv.ba,Sevdah TV,7,povezano,SevdahTV.ba
+sitel.mk,Sitel,4,povezano,Sitel.mk
+slo1.si,SLO1,7,povezano,TVSLO1.si
+slo2.si,SLO2,7,povezano,TVSLO2.si
+slo3.si,SLO3,6,povezano,TVSLO3.si
+sremska-tv.sr,Sremska TV,7,povezano,SremskaTV.rs
+studio-b-yu.sr,Studio B,7,povezano,StudioB.rs
+televizija-5.ba,Televizija 5,7,povezano,Televizija5.ba
+televizija-as.si,TV AS,4,povezano,TVAS.si
+tera-tv.mk,Tera TV,6,povezano,TeraTV.mk
+tv-celje.si,TV Celje,3,povezano,TVCelje.si
+tv-duga-sat.sr,TV Duga +,7,povezano,TVDugaPlus.rs
+tv-fruska-gora.sr,TV Fruška gora,4,povezano,TVFruskaGora.rs
+tv-jadran.hr,TV Jadran,7,povezano,TVJadran.hr
+tv-most.sr,TV Most,4,povezano,TVMost.rs
+tv-nova.hr,TV NOVA,6,povezano,TVNova.hr
+tv-ras.sr,TV Ras,7,povezano,TVRas.rs
+tv-sarajevo.ba,TVSA,7,povezano,TVSA.ba
+tv-zapad.hr,TV Zapad,4,povezano,TVZapad.hr
+tv3-medias.si,TV3 Medias,7,povezano,TV3.si
+tvcg-sat.cg,TVCG SAT,2,povezano,TVCGMNE.me
+tvcg1.cg,TVCG1,7,povezano,TVCG1.me
+tvcg2.cg,TVCG2,1,povezano,TVCG2.me
+vas-kanal.si,Vaš kanal,6,povezano,Vaskanal.si
+vtv-studio.si,VTV,6,povezano,VTV.si
+z1.hr,Z1,7,povezano,Z1.hr
+niska-televizija.sr,NTV,4,rucno_iskljuceno,
+tv1.ba,TV1,7,rucno_iskljuceno,
+pink-bih.ba,PINK BH,6,vise_poklapanja,
+pink-m.cg,PINK M,7,vise_poklapanja,
