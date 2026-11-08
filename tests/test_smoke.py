@@ -439,7 +439,7 @@ def test_time_range_marks_yesterday_and_tomorrow():
 
 
 def test_list_item_properties_used_for_styling_exist():
-    pytest.importorskip("kivymd")
+    _needs_display()
     from kivy.uix.scrollview import ScrollView
     from kivymd.uix.list import OneLineListItem, TwoLineListItem
 

@@ -79,6 +79,9 @@ class SearchView(MDBoxLayout):
     status_text = StringProperty("")
     schedule_text = StringProperty("")
     in_schedule = BooleanProperty(False)
+    back_text = StringProperty("")
+    favourite_icon = StringProperty("star-outline")
+    favourites_enabled = BooleanProperty(False)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -86,6 +89,7 @@ class SearchView(MDBoxLayout):
         self._request_id = 0
         self._last_outcome = None  # poslednji rezultat pretrage
         self._channel = None
+        self._origin = "search"  # odakle je otvoren raspored: "search" ili "favourites"
         self._sources = None
         self._outcome = None  # poslednji prikazani raspored
         self._signature = None
@@ -93,7 +97,9 @@ class SearchView(MDBoxLayout):
         self._last_reload = 0.0
 
     def on_kv_post(self, base_widget):
-        self.status_text = MDApp.get_running_app().t("search_examples")
+        app = MDApp.get_running_app()
+        self.status_text = app.t("search_examples")
+        self.back_text = app.t("schedule_back")
 
     # ---- pretraga ---------------------------------------------------------
 
@@ -163,14 +169,19 @@ class SearchView(MDBoxLayout):
     # ---- raspored: otvaranje i preuzimanje -------------------------------------
 
     def _on_select(self, result, *_args):
-        self.open_schedule(result.channel)
+        self.open_schedule(result.channel, origin="search")
 
-    def open_schedule(self, channel, force=False):
+    def open_schedule(self, channel, force=False, origin=None):
         app = MDApp.get_running_app()
         app.selected_channel = channel
         self._cancel_tick()
         self._request_id += 1
+        if origin is not None:
+            self._origin = origin
+        self.back_text = app.t(
+            "schedule_back_favourites" if self._origin == "favourites" else "schedule_back")
         self._channel, self._sources = channel, None
+        self._sync_favourite()
         self._outcome, self._signature = None, None
         self.in_schedule = True
         self.status_text = ""
@@ -193,7 +204,7 @@ class SearchView(MDBoxLayout):
     def refresh_schedule(self):
         """Dugme "Osvezi": trazi nove podatke (servis ogranicava ucestalost)."""
         if self.in_schedule and self._channel is not None:
-            self.open_schedule(self._channel, force=True)
+            self.open_schedule(self._channel, force=True, origin=self._origin)
 
     def _start_load(self, service, force):
         self._last_reload = time.time()
@@ -411,14 +422,51 @@ class SearchView(MDBoxLayout):
             self._start_load(service, False)
 
     def show_results(self):
-        """Povratak sa rasporeda na rezultate pretrage."""
+        """Povratak sa rasporeda: na rezultate pretrage ili, ako je otvoren iz Omiljenih, na njih."""
         app = MDApp.get_running_app()
+        came_from_favourites = self._origin == "favourites"
         self._leave_schedule()
         self.ids.results.clear_widgets()
         if self._last_outcome is not None:
             self._render_search(app, self._last_outcome)
         else:
             self.status_text = app.t("search_examples")
+        if came_from_favourites:
+            self._origin = "search"
+            app.show_favourites_tab()
+
+    # ---- omiljene ---------------------------------------------------------------
+
+    def _sync_favourite(self):
+        """Postavlja zvezdicu prema tome da li je izabrana stanica omiljena."""
+        service = MDApp.get_running_app().favourites_service
+        self.favourites_enabled = service is not None and self._channel is not None
+        if not self.favourites_enabled:
+            self.favourite_icon = "star-outline"
+            return
+        try:
+            is_favourite = service.is_favourite(self._channel)
+        except Exception:
+            _LOGGER.exception("Stanje omiljene stanice nije procitano")
+            self.favourites_enabled = False
+            self.favourite_icon = "star-outline"
+            return
+        self.favourite_icon = "star" if is_favourite else "star-outline"
+
+    def toggle_favourite(self):
+        app = MDApp.get_running_app()
+        service = app.favourites_service
+        if service is None or self._channel is None:
+            return
+        try:
+            service.toggle(self._channel)
+        except Exception:  # greska baze ne sme da sruši aplikaciju
+            _LOGGER.exception("Omiljena stanica nije sacuvana")
+            self.status_text = app.t("fav_error")
+            return
+        self.status_text = ""
+        self._sync_favourite()
+        app.favourites_changed()
 
     def _leave_schedule(self):
         self._cancel_tick()
@@ -426,3 +474,4 @@ class SearchView(MDBoxLayout):
         self.in_schedule = False
         self.schedule_text = ""
         self._channel = self._sources = self._outcome = self._signature = None
+        self._sync_favourite()

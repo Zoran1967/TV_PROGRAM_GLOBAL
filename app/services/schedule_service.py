@@ -37,6 +37,8 @@ MAX_CACHE_ENTRIES = 50
 MIN_MANUAL_REFRESH_SECONDS = 60
 # Rupa u rasporedu se prijavljuje tek kad je duza od ovoga
 MIN_GAP_SECONDS = 120
+# Sacuvan raspored "iz buducnosti" za vise od ovoga (pogresan sat) se ne koristi
+MAX_CLOCK_SKEW_SECONDS = 300
 
 
 class ScheduleStatus(Enum):
@@ -120,10 +122,12 @@ def _status_for(error):
 
 
 class ScheduleService:
-    def __init__(self, catalog, registry, clock=time.time):
+    def __init__(self, catalog, registry, clock=time.time, store=None):
         self._catalog = catalog
         self._registry = registry
         self._clock = clock
+        # Trajni kes (UserDatabase) ili None: tada se podaci cuvaju samo u memoriji
+        self._store = store
         self._cache = {}  # (source_id, source_channel_id) -> _CacheEntry
         self._lock = threading.Lock()
 
@@ -211,6 +215,7 @@ class ScheduleService:
                                     key=lambda item: item.start_utc)
                 entry = _CacheEntry(now, programmes)
                 self._cache_put(key, entry)
+                self._persist(source, entry)
             except ProviderError as error:
                 LOGGER.warning("Izvor %s, stanica %s: %s (%s)", info.id,
                                source.source_channel_id, error.code, error)
@@ -298,7 +303,41 @@ class ScheduleService:
 
     def _cache_get(self, key):
         with self._lock:
-            return self._cache.get(key)
+            entry = self._cache.get(key)
+        if entry is not None or self._store is None:
+            return entry
+        return self._restore(key)
+
+    def _restore(self, key):
+        """Ucitava poslednji sacuvan raspored sa diska (posle ponovnog pokretanja aplikacije)."""
+        try:
+            saved = self._store.load_schedule(*key)
+        except Exception as error:  # kes na disku nikad ne sme da sruši prikaz
+            LOGGER.warning("Sacuvan raspored %s nije procitan: %s", key, error)
+            return None
+        if saved is None:
+            return None
+        fetched_at, programmes = saved
+        if fetched_at > int(self._clock()) + MAX_CLOCK_SKEW_SECONDS:
+            LOGGER.warning("Sacuvan raspored %s je iz buducnosti (sat telefona?); ignorise se", key)
+            return None
+        entry = _CacheEntry(fetched_at, programmes)
+        with self._lock:
+            # Ako je u medjuvremenu stigao noviji podatak u memoriju, on ima prednost
+            existing = self._cache.get(key)
+            if existing is not None:
+                return existing
+        self._cache_put(key, entry)
+        return entry
+
+    def _persist(self, source, entry):
+        if self._store is None:
+            return
+        try:
+            self._store.save_schedule(
+                source.source_id, source.source_channel_id, entry.fetched_at, entry.programmes)
+        except Exception as error:  # nema trajnog cuvanja, ali prikaz radi dalje
+            LOGGER.warning("Raspored %s nije sacuvan na disk: %s", source.source_channel_id, error)
 
     def _cache_put(self, key, entry):
         with self._lock:

@@ -25,7 +25,7 @@
         spacing: dp(8)
 
         MDFlatButton:
-            text: app.t("schedule_back")
+            text: root.back_text
             theme_text_color: "Custom"
             text_color: app.colors["gold"]
             disabled: not root.in_schedule
@@ -38,6 +38,14 @@
             disabled: not root.in_schedule
             on_release: root.refresh_schedule()
 
+        MDIconButton:
+            icon: root.favourite_icon
+            theme_icon_color: "Custom"
+            icon_color: app.colors["gold"]
+            disabled: not (root.in_schedule and root.favourites_enabled)
+            opacity: 1 if root.favourites_enabled else 0
+            on_release: root.toggle_favourite()
+
     MDLabel:
         text: root.schedule_text
         theme_text_color: "Custom"
@@ -48,6 +56,30 @@
     MDScrollView:
         id: scroll
 
+        MDList:
+            id: results
+
+<FavouritesView>:
+    orientation: "vertical"
+    padding: dp(16), dp(8), dp(16), dp(8)
+    spacing: dp(8)
+
+    MDLabel:
+        text: app.t("favourites_title")
+        font_style: "H5"
+        theme_text_color: "Custom"
+        text_color: app.colors["gold"]
+        size_hint_y: None
+        height: self.texture_size[1]
+
+    MDLabel:
+        text: root.status_text
+        theme_text_color: "Custom"
+        text_color: app.colors["text_muted"]
+        size_hint_y: None
+        height: self.texture_size[1] if self.text else 0
+
+    MDScrollView:
         MDList:
             id: results
 
@@ -65,6 +97,7 @@ MDScreen:
             elevation: 0
 
         MDBottomNavigation:
+            id: nav
             panel_color: app.colors["navy_light"]
             text_color_active: app.colors["gold"]
             text_color_normal: app.colors["text_muted"]
@@ -75,31 +108,15 @@ MDScreen:
                 icon: "magnify"
 
                 SearchView:
+                    id: search_view
 
             MDBottomNavigationItem:
                 name: "favourites"
                 text: app.t("tab_favourites")
                 icon: "star-outline"
 
-                MDBoxLayout:
-                    orientation: "vertical"
-                    padding: dp(24)
-                    spacing: dp(16)
-
-                    MDLabel:
-                        text: app.t("favourites_title")
-                        halign: "center"
-                        font_style: "H5"
-                        theme_text_color: "Custom"
-                        text_color: app.colors["gold"]
-                        size_hint_y: None
-                        height: self.texture_size[1]
-
-                    MDLabel:
-                        text: app.t("favourites_placeholder")
-                        halign: "center"
-                        theme_text_color: "Custom"
-                        text_color: app.colors["text_muted"]
+                FavouritesView:
+                    id: favourites_view
 
             MDBottomNavigationItem:
                 name: "settings"

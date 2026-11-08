@@ -3,10 +3,11 @@
 Android aplikacija (Python, Kivy/KivyMD) za pronalazenje TV stanica i njihovog dnevnog rasporeda.
 Aplikacija prikazuje TV rasporede, ne TV prenos.
 
-**Status: Faza 5 - dnevni TV vodic.** Pretraga radi nad ugradjenim katalogom stanica (bez
+**Status: Faza 6 - omiljene stanice i trajni kes.** Pretraga radi nad ugradjenim katalogom stanica (bez
 interneta). Za 126 stanica sa Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna
 Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnji program sa
-oznakama "Sada" i "Sledece". Omiljeni i trajni kes stizu u Fazi 6.
+oznakama "Sada" i "Sledece". Omiljene stanice i poslednji preuzeti raspored ostaju sacuvani i
+posle zatvaranja aplikacije (Faza 6). Podesavanja i jezici stizu u Fazi 7.
 
 ## Pretraga (Faza 3)
 
@@ -73,6 +74,25 @@ oznakama "Sada" i "Sledece". Omiljeni i trajni kes stizu u Fazi 6.
   nije u redu (najcesce na 5 min).
 - Dugme "Osvezi" trazi nove podatke; ako su preuzeti pre manje od minut, koriste se oni.
 
+## Omiljene stanice i trajni kes (Faza 6)
+
+- Zvezdica pored dugmeta "Osvezi" (na ekranu rasporeda) dodaje stanicu u omiljene ili je uklanja.
+  Kartica **Omiljeni** prikazuje spisak (po nazivu, sa drzavom); dodir otvara raspored, a dugme
+  "Nazad na omiljene" vraca na spisak.
+- Omiljene se cuvaju po `catalog_id` (npr. `RTS1.rs`), pa ostaju ispravne i kad se katalog osvezi.
+  Ako stanice vise nema u katalogu, ne prikazuje se, ali ostaje sacuvana i ekran javlja koliko ih je.
+- Poslednji uspesno preuzet raspored svake stanice se upisuje na disk. Posle ponovnog pokretanja:
+  svez podatak (mladji od roka osvezavanja izvora) se koristi bez mreze; stariji se pokusava osveziti,
+  a ako mreze nema prikazuje se uz oznaku "stariji podaci" i pravo vreme preuzimanja. Neuspelo osvezavanje
+  ne prepisuje sacuvane podatke. Nista se ne izmislja: bez sacuvanih podataka i bez mreze ekran javlja gresku.
+- Baza je `userdata.db` u folderu aplikacije (`App.user_data_dir`), odvojena od kataloga koji se ne menja.
+  Kes drzi najvise 100 stanica i brise podatke starije od 14 dana. Sacuvan raspored "iz buducnosti"
+  (pogresan sat telefona) se ignorise.
+- Ostecena baza se premesta u `userdata.db.corrupt-<vreme>` (ne brise se) i pravi se nova. Baza novije
+  verzije aplikacije se ne dira. Ako trajno cuvanje ne radi, pretraga i raspored rade dalje (kes je samo
+  u memoriji), a kartica Omiljeni to objasnjava; stanje se vidi i u Podesavanjima.
+- Za razvoj i testove: promenljiva okruzenja `TVPG_USER_DATA_DIR` menja folder korisnickih podataka.
+
 ## Katalog stanica
 
 - Fajl `data/catalog_seed.db` (SQLite, samo za citanje) ulazi u APK.
@@ -99,9 +119,11 @@ app/
   strings.py                 tekstovi interfejsa (srpski)
   theme.py                   boje
   ui/main.kv                 izgled ekrana
-  screens/search_view.py     ekran pretrage
+  screens/search_view.py     ekran pretrage i rasporeda
+  screens/favourites_view.py ekran omiljenih stanica
   services/search_service.py pretraga (pravila, statusi)
-  services/schedule_service.py raspored za danas (kes u memoriji, greske, zona, osvezavanje prikaza)
+  services/schedule_service.py raspored za danas (kes u memoriji i na disku, greske, zona, osvezavanje prikaza)
+  services/favourites_service.py omiljene stanice (korisnicka baza + katalog)
   services/now_next.py       izracunavanje "Sada" i "Sledece"
   services/factory.py        pravi servise pri pokretanju
   providers/                 izvori rasporeda: base, tvprofil, xmltv, registry, errors
@@ -109,6 +131,7 @@ app/
   build_flavor.py            "dev" ili "release" izgradnja
   database/schema.py         sema kataloga
   database/catalog.py        citanje kataloga
+  database/userdata.py       omiljene i trajni kes rasporeda (upisiva baza userdata.db)
   models/channel.py          modeli stanice i rezultata
   models/schedule.py         modeli emisije i veze stanice sa izvorom
   utils/text.py              normalizacija teksta
@@ -164,7 +187,10 @@ ekrana rade samo kad postoji ekran (na racunaru) i u GitHub Actions se preskacu.
 - Pretraga ne pokazuje unapred koja stanica ima raspored; to se vidi tek posle dodira.
 - Izgled ekrana rasporeda (isticanje trenutne emisije, pomeranje liste, dugmad) proveren je samo
   testovima na racunaru, ne na telefonu.
-- Nema trajnog kesa (Faza 6): kes je samo u memoriji tokom sesije.
+- Trajno cuvanje (omiljene, kes) je proveravano testovima na racunaru; na telefonu nije. Nije proveren
+  ni upis u `user_data_dir` na Androidu niti ponasanje kad Android ocisti podatke aplikacije
+  (tada se omiljene brisu zajedno sa njima).
+- Omiljene se ne mogu ukloniti sa kartice Omiljeni; uklanjaju se zvezdicom na ekranu rasporeda.
 - "Sada/Sledece" se racunaju iz sata na telefonu; pogresan sat telefona daje pogresne oznake
   (aplikacija to ne proverava).
 - Izbor drugog datuma jos ne postoji (izvor daje samo narednih nekoliko dana).

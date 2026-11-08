@@ -19,6 +19,7 @@ from kivy.utils import platform
 from kivymd.app import MDApp
 
 from app.build_flavor import FLAVOR
+from app.screens.favourites_view import FavouritesView  # noqa: F401 (registruje klasu za .kv)
 from app.screens.search_view import SearchView  # noqa: F401 (registruje klasu za .kv)
 from app.services.factory import create_services
 from app.strings import DEFAULT_LANGUAGE, t as translate
@@ -45,8 +46,14 @@ class TvProgramGlobalApp(MDApp):
     search_service = ObjectProperty(None, allownone=True)
     # Servis rasporeda (None ako katalog stanica ne moze da se otvori)
     schedule_service = ObjectProperty(None, allownone=True)
+    # Servis omiljenih stanica (None ako trajno cuvanje nije dostupno)
+    favourites_service = ObjectProperty(None, allownone=True)
+    # Raste pri svakoj promeni omiljenih; ekrani se prema tome osvezavaju
+    favourites_version = NumericProperty(0)
     # Poslednja stanica koju je korisnik izabrao u pretrazi
     selected_channel = ObjectProperty(None, allownone=True)
+    # Opis stanja trajnog cuvanja (za Podesavanja)
+    storage_info = StringProperty("")
 
     _inset_tries = 0
     _inset_rechecks = 0
@@ -55,10 +62,30 @@ class TvProgramGlobalApp(MDApp):
         """Tekst interfejsa za trenutni jezik (poziva se iz .kv fajla)."""
         return translate(key, self.language)
 
+    def _user_data_directory(self):
+        """Folder za trajne podatke. Promenljiva TVPG_USER_DATA_DIR je samo za testove i razvoj."""
+        return os.environ.get("TVPG_USER_DATA_DIR") or self.user_data_dir
+
+    def favourites_changed(self):
+        """Javlja ekranima da se spisak omiljenih promenio."""
+        self.favourites_version += 1
+
+    def open_channel_schedule(self, channel, origin="favourites"):
+        """Otvara raspored stanice na kartici Pretraga (npr. iz Omiljenih)."""
+        self.root.ids.nav.switch_tab("search")
+        self.root.ids.search_view.open_schedule(channel, origin=origin)
+
+    def show_favourites_tab(self):
+        self.root.ids.nav.switch_tab("favourites")
+
     def build(self):
         self.theme_cls.theme_style = "Dark"
         self.theme_cls.primary_palette = "Amber"
-        self.search_service, self.schedule_service = create_services()
+        services = create_services(self._user_data_directory())
+        self.search_service = services.search
+        self.schedule_service = services.schedule
+        self.favourites_service = services.favourites
+        self.storage_info = services.storage_info
         self._refresh_runtime_info()
         Window.bind(on_resize=self._on_window_resize)
         Builder.unload_file(KV_PATH)  # ne dozvoljava dvostruko ucitavanje pravila
@@ -120,6 +147,7 @@ class TvProgramGlobalApp(MDApp):
             "Sistemske trake (gore/dole): %d / %d px\n"
             "Katalog stanica: %s\n"
             "Izvori rasporeda: %s\n"
+            "Trajno čuvanje (omiljene, keš): %s\n"
             "Vrsta izgradnje: %s"
         ) % (
             __version__,
@@ -131,5 +159,6 @@ class TvProgramGlobalApp(MDApp):
             self.inset_bottom,
             self._catalog_info(),
             self._providers_info(),
+            self.storage_info,
             FLAVOR,
         )

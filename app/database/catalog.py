@@ -93,6 +93,22 @@ class CatalogDatabase:
         ).fetchall()
         return [ChannelSource(*row) for row in rows]
 
+    def get_by_catalog_id(self, catalog_id):
+        """Stanica po catalog_id (npr. "RTS1.rs") ili None ako je nema u katalogu."""
+        row = self._connection.execute(
+            "SELECT c.id, c.catalog_id, c.name, c.country_code, co.name, c.network,"
+            " (SELECT COUNT(*) FROM channel_source s WHERE s.channel_id = c.id)"
+            " FROM channel c JOIN country co ON co.code = c.country_code"
+            " WHERE c.catalog_id = ?",
+            (catalog_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return Channel(
+            id=row[0], catalog_id=row[1], name=row[2], country_code=row[3],
+            country_name=row[4], network=row[5], source_count=row[6],
+        )
+
     def find(self, key, limit):
         """Trazi stanice po kljucu (vidi app.utils.text.normalize_key).
 
