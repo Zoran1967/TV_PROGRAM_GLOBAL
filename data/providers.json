@@ -7,6 +7,7 @@
       "enabled": true,
       "license_status": "pending",
       "url_template": "https://tvprofil.net/xmltv/data/{id}/weekly_{id}_tvprofil.net.xml",
+      "daily_url_template": "https://tvprofil.net/xmltv/data/{id}/{date}_{id}_tvprofil.net.xml",
       "attribution_text": "Izvor rasporeda: TvProfil.net (XMLTV servis)",
       "attribution_url": "https://tvprofil.net/xmltv/",
       "min_refresh_seconds": 21600,
