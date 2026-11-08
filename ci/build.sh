@@ -38,6 +38,39 @@ if [ -z "${P4A_FREETYPE_DIR:-}" ]; then
   echo "UPOZORENJE: FreeType nije preuzet unapred; p4a pokusava sam."
 fi
 
+echo "=== Biblioteke (rezervni izvori) ==="
+# python-for-android preuzima OpenSSL sa www.openssl.org i SDL2_mixer sa GitHub-a; oba cesto vrate 504.
+# Ovde se fajl preuzima unapred (sa vise izvora) u kes koji p4a vec koristi
+# (~/.buildozer/android/packages/<recept>/). Ako je fajl tamo, p4a ga ne preuzima ponovo.
+PAKETI_DIR="$HOME/.buildozer/android/packages"
+pripremi_paket() {
+  local recept="$1"; shift
+  local ime; ime=$(basename "$1")
+  local cilj="$PAKETI_DIR/$recept/$ime"
+  mkdir -p "$PAKETI_DIR/$recept"
+  for izvor in "$@"; do
+    echo "Pokusavam ($recept): $izvor"
+    rm -f "$cilj" "$PAKETI_DIR/$recept/.mark-$ime"
+    if curl -fL --retry 3 --retry-delay 5 --connect-timeout 20 --max-time 180 -o "$cilj" "$izvor" \
+        && tar -tzf "$cilj" > /dev/null 2>&1; then
+      touch "$PAKETI_DIR/$recept/.mark-$ime"
+      echo "Preuzeto unapred: $recept"
+      return 0
+    fi
+    rm -f "$cilj"
+    echo "Ovaj izvor ne radi."
+  done
+  echo "UPOZORENJE: $recept nije preuzet unapred; p4a pokusava sam."
+  return 0
+}
+# Verzije moraju da se poklapaju sa verzijama u python-for-android grani iz buildozer.spec.
+pripremi_paket openssl \
+  "https://www.openssl.org/source/openssl-3.3.1.tar.gz" \
+  "https://github.com/openssl/openssl/releases/download/openssl-3.3.1/openssl-3.3.1.tar.gz"
+pripremi_paket sdl2_mixer \
+  "https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.6.3/SDL2_mixer-2.6.3.tar.gz" \
+  "https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-2.6.3.tar.gz"
+
 echo "=== Izgradnja APK-a ==="
 # Preuzimanja biblioteka sa GitHub-a povremeno padnu (npr. HTTP 504); tada se pokusava ponovo.
 for pokusaj in 1 2 3 4 5 6 7 8 9 10; do
