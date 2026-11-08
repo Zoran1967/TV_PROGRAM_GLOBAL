@@ -678,3 +678,49 @@ def test_tapping_a_programme_opens_details_with_film_and_series_notes():
         assert view._details_dialog is None
     finally:
         Window.remove_widget(root)
+
+
+def test_long_description_is_scrollable_and_close_button_stays_on_screen():
+    _needs_display()
+    import datetime
+    from zoneinfo import ZoneInfo
+    from kivy.clock import Clock
+    from kivy.core.window import Window
+    from kivymd.uix.label import MDLabel
+    from kivymd.uix.scrollview import MDScrollView
+    from app.models.schedule import Programme
+    from app.services.schedule_service import ScheduleEntry
+
+    zone = ZoneInfo("Europe/Belgrade")
+    start = datetime.datetime(2026, 11, 6, 19, 0, tzinfo=zone)
+    long_text = " ".join("Recenica broj %d o veoma dugackom opisu serije." % n for n in range(1, 120))
+    programme = Programme("Dugacak opis", 0, 0, long_text, "Serija")
+    entries = (ScheduleEntry(start, start + datetime.timedelta(hours=1), "Dugacak opis", long_text,
+                             "Serija", programme=programme),)
+
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = StubSchedule(lambda channel: _outcome(channel, entries=entries))
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        list(reversed(view.ids.results.children))[0].dispatch("on_release")
+        for _ in range(8):
+            Clock.tick()
+        dialog = view._details_dialog
+        assert dialog is not None and long_text in dialog.text
+
+        scroll = next(w for w in dialog.walk() if isinstance(w, MDScrollView) and w.children
+                      and isinstance(w.children[0], MDLabel) and long_text in w.children[0].text)
+        label = scroll.children[0]
+        assert scroll.height <= Window.height * 0.5 + 1             # prozor ne raste preko ekrana
+        assert label.height > scroll.height * 2                     # tekst je duzi od vidljivog dela
+        assert dialog.height <= Window.height                       # ceo dijalog staje na ekran
+        assert scroll.do_scroll_y and not scroll.do_scroll_x
+
+        scroll.scroll_y = 0                                         # skrolovanje do kraja radi
+        Clock.tick()
+        assert scroll.scroll_y == 0
+        button = next(w for w in dialog.walk() if getattr(w, "text", "") == "Zatvori")
+        assert 0 <= button.to_window(*button.pos)[1] and button.to_window(button.x, button.top)[1] <= Window.height
+    finally:
+        Window.remove_widget(root)

@@ -7,6 +7,7 @@ import time
 from functools import partial
 
 from kivy.clock import Clock
+from kivy.core.window import Window
 from kivy.logger import Logger
 from kivy.metrics import dp
 from kivy.properties import BooleanProperty, StringProperty
@@ -14,7 +15,9 @@ from kivymd.app import MDApp
 from kivymd.uix.button import MDFlatButton
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.dialog import MDDialog
+from kivymd.uix.label import MDLabel
 from kivymd.uix.list import OneLineListItem, TwoLineListItem
+from kivymd.uix.scrollview import MDScrollView
 
 from app.providers.errors import ZoneUnavailableError
 from app.providers.xmltv import load_zone
@@ -456,9 +459,13 @@ class SearchView(MDBoxLayout):
         when = time_range(app, entry, self._today(outcome), self._fmt)
         title, _kind, body = build_details(app.t, entry, when, outcome.channel.name)
         self._close_details()
+        # MDDialog (KivyMD 1.2.0) ne pomera dugačak tekst: opis se stavlja u sopstveni klizni deo
+        # ogranicene visine, a dugme "Zatvori" ostaje uvek na ekranu.
         dialog = MDDialog(
             title=title,
-            text=body,
+            text=body,  # ne prikazuje se (type="custom"), ali ostaje procitljiv kao dialog.text
+            type="custom",
+            content_cls=self._details_content(body),
             buttons=[MDFlatButton(
                 text=app.t("detail_close"),
                 theme_text_color="Custom",
@@ -468,6 +475,23 @@ class SearchView(MDBoxLayout):
         )
         self._details_dialog = dialog
         dialog.open()
+
+    @staticmethod
+    def _details_content(body):
+        """Klizni tekst detalja: najvise ~50% visine ekrana, ceo opis se vidi skrolovanjem."""
+        label = MDLabel(text=body, size_hint_y=None, halign="left", valign="top")
+        label.bind(
+            width=lambda widget, width: setattr(widget, "text_size", (width, None)),
+            texture_size=lambda widget, size: setattr(widget, "height", size[1]),
+        )
+        scroll = MDScrollView(
+            size_hint=(1, None),
+            height=min(dp(420), Window.height * 0.5),
+            do_scroll_x=False,
+            bar_width=dp(4),
+        )
+        scroll.add_widget(label)
+        return scroll
 
     def _close_details(self):
         dialog = getattr(self, "_details_dialog", None)
