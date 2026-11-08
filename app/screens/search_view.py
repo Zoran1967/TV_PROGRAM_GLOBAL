@@ -34,6 +34,10 @@ TICK_SECONDS = 20
 RELOAD_COOLDOWN_SECONDS = 300
 SEPARATOR = " \u00b7 "
 DESCRIPTION_PREVIEW = 90
+# Lista se pravi postepeno da glavna nit nikad ne zastane (Android inace javi "ne reaguje"):
+# prvih FIRST_BATCH stavki odmah (da se ekran odmah popuni), ostatak po FRAME_BUDGET sekundi po kadru.
+FIRST_BATCH = 12
+FRAME_BUDGET = 0.012
 CURRENT_TINT = [0.85, 0.70, 0.25, 0.20]
 NEXT_TINT = [0.85, 0.70, 0.25, 0.08]
 
@@ -114,6 +118,10 @@ class SearchView(MDBoxLayout):
         self._status = None  # (kljuc teksta, vrednosti) poslednje poruke, da se prevede kad se jezik promeni
         self._schedule_message = None  # kljuc poruke ispod naslova (ucitavanje, nema izvora, greska)
         self._fmt = ClockFormat()  # prikaz vremena za poslednje crtanje rasporeda
+        self._build_id = 0  # raste pri svakom brisanju/pravljenju liste; stari posao se prekida
+        self._build_event = None  # sledeci korak postepenog pravljenja liste
+        self._restore_event = None  # odlozeno vracanje rezultata pretrage
+        self._focus_item = None  # stavka "Sada"/"Sledece" u listi koja se upravo pravi
 
     def on_kv_post(self, base_widget):
         app = MDApp.get_running_app()
@@ -161,6 +169,59 @@ class SearchView(MDBoxLayout):
         return app.t("schedule_title").format(
             name=channel.name, country=country_name(channel, app.language))
 
+    # ---- lista: brisanje i postepeno pravljenje ----------------------------------
+
+    def _cancel_build(self):
+        self._build_id += 1
+        if self._build_event is not None:
+            self._build_event.cancel()
+            self._build_event = None
+
+    def _clear_results(self):
+        """Prekida pravljenje liste koje je u toku i prazni listu."""
+        self._cancel_build()
+        if self._restore_event is not None:
+            self._restore_event.cancel()
+            self._restore_event = None
+        self.ids.results.clear_widgets()
+
+    def _fill_results(self, builders, on_done=None):
+        """Dodaje stavke u listu postepeno: builders je niz funkcija koje prave po jednu stavku.
+
+        Pravljenje KivyMD stavki je sporo na telefonu (desetine stavki odjednom blokiraju glavnu
+        nit i Android prijavi "ne reaguje"), zato se posao deli na kadrove.
+        """
+        self._cancel_build()
+        build_id = self._build_id
+        iterator = iter(builders)
+        results = self.ids.results
+
+        def step(first):
+            if build_id != self._build_id:
+                return  # u medjuvremenu je izabrano nesto drugo
+            started = time.perf_counter()
+            added = 0
+            for make in iterator:
+                try:
+                    results.add_widget(make())
+                except Exception:  # jedna pokvarena stavka ne sme da sruši aplikaciju
+                    _LOGGER.exception("Stavka liste nije napravljena")
+                    continue
+                added += 1
+                if first:
+                    if added >= FIRST_BATCH:
+                        break
+                elif time.perf_counter() - started >= FRAME_BUDGET:
+                    break
+            else:
+                self._build_event = None
+                if on_done is not None:
+                    on_done()
+                return
+            self._build_event = Clock.schedule_once(lambda _dt: step(False), 0)
+
+        step(True)
+
     # ---- pretraga ---------------------------------------------------------
 
     def schedule_search(self, text):
@@ -174,7 +235,7 @@ class SearchView(MDBoxLayout):
     def run_search(self, text):
         app = MDApp.get_running_app()
         self._leave_schedule()
-        self.ids.results.clear_widgets()
+        self._clear_results()
         self._last_outcome = None
         service = app.search_service
         if service is None:
@@ -190,7 +251,7 @@ class SearchView(MDBoxLayout):
         self._render_search(app, outcome)
 
     def _render_search(self, app, outcome):
-        self.ids.results.clear_widgets()
+        self._clear_results()
         if outcome.status == SearchStatus.OK:
             self._show_results(app, outcome)
         elif outcome.status == SearchStatus.TOO_SHORT:
@@ -206,13 +267,15 @@ class SearchView(MDBoxLayout):
         count = len(outcome.results)
         key = "search_truncated" if outcome.truncated else "search_count"
         self._set_status(key, count=count)
-        for result in outcome.results:
-            item = TwoLineListItem(
-                text=result.channel.name,
-                secondary_text=self._secondary_text(app, result),
-            )
-            item.bind(on_release=partial(self._on_select, result))
-            self.ids.results.add_widget(item)
+        self._fill_results(partial(self._result_item, app, result) for result in outcome.results)
+
+    def _result_item(self, app, result):
+        item = TwoLineListItem(
+            text=result.channel.name,
+            secondary_text=self._secondary_text(app, result),
+        )
+        item.bind(on_release=partial(self._on_select, result))
+        return item
 
     @staticmethod
     def _secondary_text(app, result):
@@ -245,7 +308,7 @@ class SearchView(MDBoxLayout):
         self._outcome, self._signature = None, None
         self.in_schedule = True
         self._set_status()
-        self.ids.results.clear_widgets()
+        self._clear_results()
 
         service = app.schedule_service
         if channel.source_count == 0 or service is None:
@@ -262,8 +325,18 @@ class SearchView(MDBoxLayout):
 
     def refresh_schedule(self):
         """Dugme "Osvezi": trazi nove podatke (servis ogranicava ucestalost)."""
-        if self.in_schedule and self._channel is not None:
+        if not self.in_schedule or self._channel is None:
+            return
+        service = MDApp.get_running_app().schedule_service
+        if self._outcome is None or self._sources is None or service is None:
+            # Nista jos nije prikazano: otvara se ispocetka
             self.open_schedule(self._channel, force=True, origin=self._origin)
+            return
+        # Prikazani raspored ostaje na ekranu dok se novi preuzima: lista se ne brise i ne pravi
+        # ponovo (to je bilo sporo), a ako se podaci nisu promenili ostaje netaknuta.
+        self._request_id += 1
+        self._set_status("schedule_loading")
+        self._start_load(service, True)
 
     def _start_load(self, service, force):
         self._last_reload = time.time()
@@ -286,8 +359,16 @@ class SearchView(MDBoxLayout):
         if request_id != self._request_id or not self.in_schedule:
             return  # korisnik je u medjuvremenu izabrao drugu stanicu ili se vratio
         app = MDApp.get_running_app()
+        self._set_status()
+        unchanged = (
+            self._outcome is not None and self._signature is not None
+            and self._signature_of(outcome) == self._signature
+        )
         self._outcome = outcome
-        self._render(app, outcome)
+        if unchanged:
+            self.schedule_text = self._header_text(app, outcome)  # lista ostaje, osvezava se zaglavlje
+        else:
+            self._render(app, outcome)
         self._start_tick()
 
     # ---- raspored: prikaz --------------------------------------------------------
@@ -298,18 +379,26 @@ class SearchView(MDBoxLayout):
         self._fmt = app.clock_format()
         self._signature = self._signature_of(outcome)
         self.schedule_text = self._header_text(app, outcome)
-        results = self.ids.results
-        results.clear_widgets()
+        self._clear_results()
+        self._focus_item = None
         if outcome.status not in (ScheduleStatus.OK, ScheduleStatus.NO_DATA_FOR_DATE):
             return
-        focus = None
+        self._fill_results(self._schedule_builders(app, outcome), on_done=self._scroll_to_focus)
+
+    def _schedule_builders(self, app, outcome):
         for entry in outcome.entries:
-            item = self._entry_item(app, entry, outcome)
-            results.add_widget(item)
-            if focus is None and (entry.is_current or entry.is_next):
-                focus = item
+            yield partial(self._make_entry, app, entry, outcome)
             if entry.gap_until is not None:
-                results.add_widget(self._gap_item(app, entry))
+                yield partial(self._gap_item, app, entry)
+
+    def _make_entry(self, app, entry, outcome):
+        item = self._entry_item(app, entry, outcome)
+        if self._focus_item is None and (entry.is_current or entry.is_next):
+            self._focus_item = item
+        return item
+
+    def _scroll_to_focus(self):
+        focus = self._focus_item
         if focus is not None:
             Clock.schedule_once(lambda _dt: self._scroll_to(focus), 0.1)
 
@@ -553,14 +642,24 @@ class SearchView(MDBoxLayout):
         app = MDApp.get_running_app()
         came_from_favourites = self._origin == "favourites"
         self._leave_schedule()
-        self.ids.results.clear_widgets()
+        self._clear_results()
+        if came_from_favourites:
+            self._origin = "search"
+            app.show_favourites_tab()
+            # Rezultati pretrage se vracaju tek kad je prelazak na Omiljene gotov (ne vide se)
+            self._restore_event = Clock.schedule_once(self._restore_search, 0.4)
+            return
+        self._restore_search()
+
+    def _restore_search(self, *_args):
+        self._restore_event = None
+        if self.in_schedule:
+            return
+        app = MDApp.get_running_app()
         if self._last_outcome is not None:
             self._render_search(app, self._last_outcome)
         else:
             self._set_status("search_examples")
-        if came_from_favourites:
-            self._origin = "search"
-            app.show_favourites_tab()
 
     # ---- omiljene ---------------------------------------------------------------
 
