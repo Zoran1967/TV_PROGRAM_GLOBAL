@@ -25,14 +25,32 @@ jobs:
       - name: Raspakuj ZIP fajlove
         run: |
           shopt -s nullglob
+          # Ostaci ranijih pogresnih raspakivanja (ZIP sa spoljasnjim folderom) se brisu sami
+          for d in TV_PROGRAM_GLOBAL-main*; do
+            if [ -d "$d" ]; then
+              echo "Brisem pogresan folder: $d"
+              git rm -r -f -q "$d" 2>/dev/null || rm -rf "$d"
+              rm -rf "$d"
+            fi
+          done
           fajlovi=(*.zip)
           if [ ${#fajlovi[@]} -eq 0 ]; then
             echo "Nema ZIP fajlova u korenu repozitorijuma."
-            exit 0
           fi
           for z in "${fajlovi[@]}"; do
             echo "Raspakujem: $z"
-            unzip -o "$z" -x '.git/*' '.github/*' '__MACOSX/*'
+            tmp=$(mktemp -d)
+            unzip -q -o "$z" -x '.git/*' '.github/*' '__MACOSX/*' -d "$tmp"
+            # ZIP sa jednim spoljasnjim folderom TV_PROGRAM_GLOBAL* (npr. preuzet sa GitHub-a):
+            # sadrzaj tog foldera ide u koren repozitorijuma
+            mapfile -t stavke < <(ls -A "$tmp")
+            src="$tmp"
+            if [ ${#stavke[@]} -eq 1 ] && [ -d "$tmp/${stavke[0]}" ] && [[ "${stavke[0]}" == TV_PROGRAM_GLOBAL* ]]; then
+              echo "Spoljasnji folder ${stavke[0]} se preskace."
+              src="$tmp/${stavke[0]}"
+            fi
+            cp -a "$src"/. .
+            rm -rf "$tmp"
             git rm -f --quiet "$z"
           done
 
