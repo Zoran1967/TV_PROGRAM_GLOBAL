@@ -45,6 +45,7 @@ from app.theme import COLORS, DEFAULT_THEME, PALETTES, THEME_STYLES
 from app.utils.android_insets import get_system_insets
 from app.utils.clockfmt import ClockFormat
 from app.utils.devicezone import detect_device_zone_name
+from app.utils.watchdog import StallWatchdog, read_report
 from app.version import __version__
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,6 +57,10 @@ INSET_MAX_TRIES = 20
 INSET_RECHECKS = 3
 # Koliko dugo se pamti prepoznata zona uredjaja (putnik moze da je promeni dok je aplikacija otvorena)
 DEVICE_ZONE_CACHE_SECONDS = 300
+# Dijagnostika zastoja: glavna nit javlja otkucaj ovako cesto; zastoj duzi od praga se upisuje
+BEAT_SECONDS = 0.25
+STALL_THRESHOLD_SECONDS = 2.0
+STALL_FILE_NAME = "stalls.txt"
 
 
 class TvProgramGlobalApp(MDApp):
@@ -89,6 +94,7 @@ class TvProgramGlobalApp(MDApp):
     _inset_tries = 0
     _inset_rechecks = 0
     _device_zone = None  # (ZoneInfo ili None, naziv ili None, vreme provere)
+    _watchdog = None
 
     def t(self, key, _language=None):
         """Tekst interfejsa za trenutni jezik (poziva se iz .kv fajla).
@@ -190,6 +196,7 @@ class TvProgramGlobalApp(MDApp):
         self.storage_state = services.storage_state
         self.storage_detail = services.storage_detail
         self._apply_all_settings()  # jezik, tema i osvezavanje vaze od prvog crtanja
+        self._setup_watchdog()
         self._refresh_runtime_info()
         Window.bind(on_resize=self._on_window_resize)
         Builder.unload_file(KV_PATH)  # ne dozvoljava dvostruko ucitavanje pravila
@@ -197,14 +204,48 @@ class TvProgramGlobalApp(MDApp):
 
     def on_pause(self):
         """Android: bez ovoga se aplikacija zatvara cim korisnik predje na drugu aplikaciju."""
+        if self._watchdog is not None:
+            self._watchdog.pause()
         return True
 
     def on_resume(self):
+        if self._watchdog is not None:
+            self._watchdog.resume()
         self._device_zone = None  # putnik je mozda promenio zonu dok je aplikacija bila u pozadini
         self.ui_version += 1  # ponovo crta prikaz (Sada/Sledece, vreme) sa tacnim satom
 
     def on_start(self):
         self._restart_inset_updates(0)
+        if self._watchdog is not None:
+            self._watchdog.start()
+            Clock.schedule_interval(self._beat, BEAT_SECONDS)
+
+    # ---- dijagnostika zastoja ----------------------------------------------------
+
+    def _stall_file(self):
+        return os.path.join(self._user_data_directory(), STALL_FILE_NAME)
+
+    def _setup_watchdog(self):
+        try:
+            watchdog = StallWatchdog(self._stall_file(), threshold=STALL_THRESHOLD_SECONDS)
+        except Exception:  # dijagnostika nikad ne sme da spreci pokretanje
+            _LOGGER.exception("Dijagnostika zastoja nije pokrenuta")
+            return
+        # Novi zapis se prikazuje u Podesavanjima (poziv iz pozadinske niti ide kroz Clock)
+        watchdog.on_report = lambda: Clock.schedule_once(
+            lambda _dt: self._refresh_runtime_info(), 0)
+        self._watchdog = watchdog
+
+    def _beat(self, _dt):
+        if self._watchdog is not None:
+            self._watchdog.beat()
+
+    def _diagnostics(self):
+        try:
+            report = read_report(self._stall_file())
+        except Exception:
+            return ""
+        return "\n\nZastoji aplikacije (dijagnostika):\n%s" % report if report else ""
 
     def _on_window_resize(self, *_args):
         self._restart_inset_updates(0.2)
@@ -271,4 +312,4 @@ class TvProgramGlobalApp(MDApp):
             providers=self._providers_info(),
             storage=self._storage_info(),
             flavor=FLAVOR,
-        )
+        ) + self._diagnostics()
