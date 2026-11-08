@@ -1,0 +1,26 @@
+name: Obrisi pogresan folder
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  obrisi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preuzmi kod
+        uses: actions/checkout@v4
+
+      - name: Obrisi TV_PROGRAM_GLOBAL-main
+        run: |
+          if [ -d TV_PROGRAM_GLOBAL-main ]; then
+            git rm -r -q TV_PROGRAM_GLOBAL-main
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Obrisan pogresan folder TV_PROGRAM_GLOBAL-main"
+            git push
+          else
+            echo "Folder ne postoji, nema sta da se brise."
+          fi
