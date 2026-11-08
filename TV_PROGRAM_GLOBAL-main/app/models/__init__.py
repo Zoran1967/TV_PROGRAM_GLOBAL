@@ -1,1 +1,0 @@
-"""Modeli podataka."""

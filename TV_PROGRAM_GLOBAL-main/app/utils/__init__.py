@@ -1,1 +1,0 @@
-"""Pomocne funkcije."""
