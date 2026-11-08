@@ -47,7 +47,7 @@ def _close(root):
 def _open_rts1_serbia(view):
     view.run_search("RTS 1")
     item = next(i for i in view.ids.results.children
-                if i.text == "RTS 1" and "Serbia" in i.secondary_text)
+                if i.text == "RTS 1" and "Srbija" in i.secondary_text)
     item.dispatch("on_release")
     _tick()
 
@@ -72,7 +72,7 @@ def test_favourite_star_adds_lists_and_removes():
         assert search.favourite_icon == "star"
         names = [i.text for i in favourites.ids.results.children]
         assert names == ["RTS 1"]
-        assert "Serbia" in favourites.ids.results.children[0].secondary_text
+        assert "Srbija" in favourites.ids.results.children[0].secondary_text
         assert "Omiljenih stanica: 1" in favourites.status_text
 
         search.toggle_favourite()

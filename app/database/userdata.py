@@ -1,8 +1,9 @@
 """Trajni korisnicki podaci (SQLite, upisiva baza u folderu aplikacije).
 
-Cuva dve stvari:
+Cuva tri stvari:
   * omiljene stanice (po catalog_id, koji ostaje isti kad se katalog osvezi);
-  * poslednji uspesno preuzet raspored po stanici kod izvora (da radi bez mreze).
+  * poslednji uspesno preuzet raspored po stanici kod izvora (da radi bez mreze);
+  * podesavanja aplikacije (jezik, tema, vreme, osvezavanje) kao parove kljuc-vrednost.
 
 Baza se koristi iz vise niti (UI nit i pozadinsko preuzimanje), pa su svi pozivi
 iza jedne brave. Svaka greska baze se prijavljuje kao UserDataError; pozivaoc
@@ -20,7 +21,7 @@ from app.models.schedule import Programme
 
 LOGGER = logging.getLogger(__name__)
 
-USER_SCHEMA_VERSION = 1
+USER_SCHEMA_VERSION = 2
 DEFAULT_FILE_NAME = "userdata.db"
 # Najvise rasporeda u trajnom kesu i koliko dugo se cuvaju
 CACHE_MAX_ENTRIES = 100
@@ -38,6 +39,14 @@ CREATE TABLE schedule_cache (
     fetched_at        INTEGER NOT NULL,
     payload           TEXT NOT NULL,
     PRIMARY KEY (source_id, source_channel_id)
+);
+"""
+
+# Verzija 2 (Faza 7): podesavanja. Baza verzije 1 se samo dopunjuje, podaci ostaju.
+_SETTING_SQL = """
+CREATE TABLE IF NOT EXISTS setting (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 """
 
@@ -95,7 +104,11 @@ class UserDatabase:
                 if has_tables:
                     raise sqlite3.DatabaseError("nepoznata baza bez oznake verzije")
                 with connection:
-                    connection.executescript(_SCHEMA_SQL)
+                    connection.executescript(_SCHEMA_SQL + _SETTING_SQL)
+                    connection.execute("PRAGMA user_version = %d" % USER_SCHEMA_VERSION)
+            elif version == 1:
+                with connection:
+                    connection.executescript(_SETTING_SQL)
                     connection.execute("PRAGMA user_version = %d" % USER_SCHEMA_VERSION)
             elif version != USER_SCHEMA_VERSION:
                 raise UserDataError(
@@ -159,6 +172,23 @@ class UserDatabase:
                 )
             ]
         )
+
+    # ---- podesavanja -------------------------------------------------------
+
+    def load_settings(self):
+        """Svi sacuvani parovi kljuc-vrednost (proveru vrednosti radi pozivalac)."""
+        return self._run(
+            lambda connection: dict(connection.execute("SELECT key, value FROM setting"))
+        )
+
+    def save_setting(self, key, value):
+        def action(connection):
+            with connection:
+                connection.execute(
+                    "INSERT OR REPLACE INTO setting (key, value) VALUES (?, ?)", (key, value)
+                )
+
+        self._run(action)
 
     # ---- trajni kes rasporeda ----------------------------------------------
 

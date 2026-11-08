@@ -1,6 +1,8 @@
 """Tekstovi interfejsa. Pocetni jezik je srpski.
 
-Novi jezik se dodaje kao novi recnik u STRINGS (Faza 7).
+Novi jezik se dodaje kao novi recnik u STRINGS (sa istim kljucevima kao srpski; to proverava
+test) i kao oznaka u settings_service.DEFINITIONS (podesavanje "language"), uz kljuc
+"lang_<oznaka>". Prevod naziva drzava je u app/utils/countries.py.
 """
 
 DEFAULT_LANGUAGE = "sr"
@@ -72,9 +74,165 @@ STRINGS = {
         "fav_error": "Omiljene nisu sačuvane. Pokušajte ponovo.",
         "schedule_back_favourites": "Nazad na omiljene",
         "settings_title": "Podešavanja",
-        "settings_placeholder": "Podešavanja stižu u Fazi 7.",
+        "settings_not_saved": "Podešavanja se ne mogu trajno sačuvati na ovom uređaju. Važe do zatvaranja aplikacije.",
+        "settings_save_error": "Podešavanje nije sačuvano. Važi do zatvaranja aplikacije.",
+        "setting_language": "Jezik",
+        "setting_theme": "Tema",
+        "setting_time_format": "Format vremena",
+        "setting_time_zone": "Prikaz vremena",
+        "setting_refresh": "Osvežavanje rasporeda",
+        "lang_sr": "Srpski",
+        "lang_en": "English",
+        "theme_dark": "Tamna",
+        "theme_light": "Svetla",
+        "time_format_24h": "24 sata (19:30)",
+        "time_format_12h": "12 sati (7:30 PM)",
+        "time_zone_station": "Vreme stanice (preporučeno)",
+        "time_zone_device": "Vreme na mom uređaju",
+        "time_zone_hint": "Zona vašeg uređaja: {zone}",
+        "time_zone_unknown": "Zona uređaja nije prepoznata, pa se prikazuje vreme stanice.",
+        "time_shown_in": "Vremena su prikazana u vašoj zoni: {zone} ({label})",
+        "refresh_source": "Prema izvoru (preporučeno)",
+        "refresh_12h": "Najviše na 12 sati",
+        "refresh_24h": "Najviše na 24 sata",
+        "refresh_manual": "Samo ručno (dugme Osveži)",
+        "refresh_hint": "Izvor ne dozvoljava češće osvežavanje od svog roka, pa se rok može samo produžiti. Prikaz Sada/Sledeće se i dalje pomera bez interneta.",
+        "about_runtime": (
+            "Verzija aplikacije: {version}\n"
+            "Python: {python}\n"
+            "Kivy: {kivy}\n"
+            "KivyMD: {kivymd}\n"
+            "Platforma: {platform}\n"
+            "Sistemske trake (gore/dole): {inset_top} / {inset_bottom} px\n"
+            "Katalog stanica: {catalog}\n"
+            "Izvori rasporeda: {providers}\n"
+            "Trajno čuvanje (omiljene, keš, podešavanja): {storage}\n"
+            "Vrsta izgradnje: {flavor}"
+        ),
+        "about_catalog_value": "{count} stanica (iptv-org, CC0, {commit})",
+        "about_unavailable": "nedostupan",
+        "about_providers_unavailable": "nedostupni",
+        "about_providers_none": "nijedan (licenca nije potvrđena)",
+        "about_provider_license": "{id} (licenca: {status})",
+        "about_storage_on": "uključeno",
+        "about_storage_memory": "nije podešeno (samo memorija)",
+        "about_storage_unavailable": "nedostupno",
+        "about_storage_unavailable_detail": "nedostupno ({detail})",
         "about_title": "O aplikaciji",
         "about_note": "Aplikacija prikazuje TV rasporede, ne TV prenos.",
+    },
+    "en": {
+        "app_title": "TV Program Global",
+        "tab_search": "Search",
+        "tab_favourites": "Favourites",
+        "tab_settings": "Settings",
+        "search_title": "TV channel search",
+        "search_hint": "Channel name or abbreviation",
+        "search_examples": "Examples: RTS1, BBC One, CNN, HRT1",
+        "search_too_short": "Enter at least 2 letters or digits.",
+        "search_not_found": "Channel not found.",
+        "search_error": "The channel catalogue is not available. Search does not work right now.",
+        "search_count": "Channels found: {count}",
+        "search_truncated": "Showing the first {count} results. Type more to narrow them down.",
+        "result_found_as": "found as: {alias}",
+        "result_id": "ID: {id}",
+        "schedule_back": "Back to results",
+        "schedule_loading": "Loading schedule...",
+        "schedule_title": "Schedule: {name} ({country})",
+        "schedule_no_source": "This channel has no linked schedule source.",
+        "schedule_unavailable": "The schedule source for this channel is not available in this version of the app.",
+        "schedule_date_zone": "Date: {date} · Zone: {zone} ({label})",
+        "schedule_source": "Source: {source}",
+        "schedule_refresh": "Refresh",
+        "station_time": "Time at the channel: {time} ({label})",
+        "now_line": "Now: {title} (until {end}) · {left} left",
+        "now_line_derived": "Now: {title} (until {end}, based on the start of the next programme) · {left} left",
+        "now_none": "Now: no programme in the schedule for this moment.",
+        "next_line": "Next: {title} at {time}",
+        "next_line_tomorrow": "Next: {title} at {time} (tomorrow)",
+        "next_none": "Next: no data in the schedule.",
+        "label_now": "NOW",
+        "label_next": "NEXT",
+        "fresh_ok": "Up to date · refreshed {time} ({age} ago)",
+        "fresh_old": "Data is {age} old (refreshed {time}). Tap Refresh.",
+        "age_under_minute": "under a minute",
+        "age_minutes": "{n} min",
+        "age_hours": "{h} h {m} min",
+        "age_hours_only": "{h} h",
+        "left_under_minute": "under a minute",
+        "now_left_short": "{left} left",
+        "day_yesterday": "yesterday",
+        "day_tomorrow": "tomorrow",
+        "schedule_gap": "No data from {start} to {end}",
+        "schedule_stale": "Showing older data. Refreshing failed: {reason}",
+        "schedule_dev_note": "Test version: the source licence is not confirmed.",
+        "schedule_net_error": "Schedule not downloaded: no connection or the source is unavailable.",
+        "schedule_http_error": "The source returned an error ({code}).",
+        "schedule_http_404": "The source has no schedule for this channel (error 404).",
+        "schedule_rate_limited": "The source asks for a pause. Try again later.",
+        "schedule_empty": "The source currently has no programmes for this channel.",
+        "schedule_parse_error": "The source data is not valid.",
+        "schedule_zone_error": "The channel's time zone is unknown. The schedule is not shown.",
+        "schedule_no_data_date": "The source has no programme for today's date ({date}).",
+        "schedule_error": "An unexpected error occurred while loading the schedule.",
+        "favourites_title": "Favourite channels",
+        "favourites_empty": "No favourite channels. Open a channel's schedule and tap the star.",
+        "favourites_unavailable": "Favourites are not available: permanent storage does not work on this device.",
+        "favourites_error": "Favourites could not be read. Try again.",
+        "favourites_count": "Favourite channels: {count}",
+        "favourites_missing": "{count} saved channels are no longer in the catalogue and are not shown.",
+        "favourites_hint": "Tap a channel to see its schedule.",
+        "fav_add": "Add to favourites",
+        "fav_remove": "Remove from favourites",
+        "fav_error": "Favourites were not saved. Try again.",
+        "schedule_back_favourites": "Back to favourites",
+        "settings_title": "Settings",
+        "settings_not_saved": "Settings cannot be saved permanently on this device. They apply until the app is closed.",
+        "settings_save_error": "The setting was not saved. It applies until the app is closed.",
+        "setting_language": "Language",
+        "setting_theme": "Theme",
+        "setting_time_format": "Time format",
+        "setting_time_zone": "Time display",
+        "setting_refresh": "Schedule refresh",
+        "lang_sr": "Srpski",
+        "lang_en": "English",
+        "theme_dark": "Dark",
+        "theme_light": "Light",
+        "time_format_24h": "24-hour (19:30)",
+        "time_format_12h": "12-hour (7:30 PM)",
+        "time_zone_station": "Channel time (recommended)",
+        "time_zone_device": "Time on my device",
+        "time_zone_hint": "Your device zone: {zone}",
+        "time_zone_unknown": "The device time zone is not recognised, so channel time is shown.",
+        "time_shown_in": "Times are shown in your zone: {zone} ({label})",
+        "refresh_source": "As the source allows (recommended)",
+        "refresh_12h": "At most every 12 hours",
+        "refresh_24h": "At most every 24 hours",
+        "refresh_manual": "Manual only (Refresh button)",
+        "refresh_hint": "The source does not allow refreshing more often than its own interval, so the interval can only be made longer. Now/Next still moves without internet.",
+        "about_title": "About",
+        "about_note": "The app shows TV schedules, not TV broadcasts.",
+        "about_runtime": (
+            "App version: {version}\n"
+            "Python: {python}\n"
+            "Kivy: {kivy}\n"
+            "KivyMD: {kivymd}\n"
+            "Platform: {platform}\n"
+            "System bars (top/bottom): {inset_top} / {inset_bottom} px\n"
+            "Channel catalogue: {catalog}\n"
+            "Schedule sources: {providers}\n"
+            "Permanent storage (favourites, cache, settings): {storage}\n"
+            "Build type: {flavor}"
+        ),
+        "about_catalog_value": "{count} channels (iptv-org, CC0, {commit})",
+        "about_unavailable": "unavailable",
+        "about_providers_unavailable": "unavailable",
+        "about_providers_none": "none (licence not confirmed)",
+        "about_provider_license": "{id} (licence: {status})",
+        "about_storage_on": "on",
+        "about_storage_memory": "not configured (memory only)",
+        "about_storage_unavailable": "unavailable",
+        "about_storage_unavailable_detail": "unavailable ({detail})",
     },
 }
 

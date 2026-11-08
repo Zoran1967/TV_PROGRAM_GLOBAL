@@ -26,10 +26,13 @@ def test_unknown_language_falls_back_to_serbian():
 def test_every_key_used_in_kv_exists():
     with open(KV_PATH, encoding="utf-8") as handle:
         kv_text = handle.read()
-    used = set(re.findall(r'app\.t\("([a-z_]+)"\)', kv_text))
+    used = set(re.findall(r'app\.t\("([a-z_0-9]+)", app\.language\)', kv_text))
     assert used, "kv fajl ne koristi nijedan tekst"
-    missing = used - set(STRINGS["sr"])
-    assert not missing, "nedostaju kljucevi: %s" % sorted(missing)
+    for language, table in STRINGS.items():
+        missing = used - set(table)
+        assert not missing, "nedostaju kljucevi (%s): %s" % (language, sorted(missing))
+    # Svaki tekst mora da zavisi od app.language, inace se ne menja sa jezikom
+    assert not re.findall(r'app\.t\("[a-z_0-9]+"\)', kv_text)
 
 
 def test_version_format():
@@ -194,7 +197,7 @@ def test_search_screen_flow():
         items = list(view.ids.results.children)
         assert len(items) >= 3
         assert any(
-            item.text == "RTS 1" and "Serbia (RS)" in item.secondary_text for item in items
+            item.text == "RTS 1" and "Srbija (RS)" in item.secondary_text for item in items
         )
         assert view.status_text.startswith("Pronađeno stanica:")
 
@@ -212,7 +215,7 @@ def test_search_screen_flow():
         item.dispatch("on_release")
         assert app.selected_channel.catalog_id == "BBCOne.uk"
         assert view.in_schedule
-        assert "Raspored: BBC One (United Kingdom)" in view.schedule_text
+        assert "Raspored: BBC One (Ujedinjeno Kraljevstvo)" in view.schedule_text
         assert "nema povezanog izvora rasporeda" in view.schedule_text
         assert not view.ids.results.children
 
@@ -288,7 +291,7 @@ def _outcome(channel, status="ok", **kwargs):
 def _select_rts1_serbia(view):
     view.run_search("RTS 1")
     item = next(i for i in view.ids.results.children
-                if i.text == "RTS 1" and "Serbia" in i.secondary_text)
+                if i.text == "RTS 1" and "Srbija" in i.secondary_text)
     item.dispatch("on_release")
 
 
@@ -303,7 +306,7 @@ def test_schedule_is_shown_with_zone_source_and_license_note():
         assert view.in_schedule and "Učitavam raspored" in view.schedule_text
         assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
         text = view.schedule_text
-        assert "Raspored: RTS 1 (Serbia)" in text
+        assert "Raspored: RTS 1 (Srbija)" in text
         assert "Datum: 06.11.2026. · Zona: Europe/Belgrade (CET)" in text
         assert "Izvor: TvProfil" in text
         assert "Probna verzija: licenca izvora nije potvrđena." in text
@@ -445,7 +448,8 @@ def test_list_item_properties_used_for_styling_exist():
 
     for name in ("bg_color", "theme_text_color", "secondary_theme_text_color"):
         assert name in TwoLineListItem().properties(), name
-    assert "theme_text_color" in OneLineListItem().properties()
+    for name in ("theme_text_color", "bg_color", "text_color"):
+        assert name in OneLineListItem().properties(), name  # ekran Podesavanja
     assert hasattr(ScrollView, "scroll_to")
 
 

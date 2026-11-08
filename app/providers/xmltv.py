@@ -29,6 +29,12 @@ _TIME_RE = re.compile(
 )
 
 
+# Ogranicenja duzine polja: pokvaren ili zlonameran fajl ne sme da napravi ogromnu stavku na ekranu
+MAX_TITLE = 300
+MAX_DESCRIPTION = 3000
+MAX_CATEGORY = 100
+
+
 class TimeFormatError(ValueError):
     """Vreme nije u XMLTV obliku."""
 
@@ -84,11 +90,13 @@ def parse_time(text, zone=None, fold=0):
     return int(aware.timestamp()), True
 
 
-def _text(node, tag):
+def _text(node, tag, limit):
     child = node.find(tag)
     if child is None or child.text is None:
         return None
     value = " ".join(child.text.split())
+    if len(value) > limit:
+        value = value[:limit - 3].rstrip() + "..."
     return value or None
 
 
@@ -110,11 +118,12 @@ def parse_xmltv(data, channel_id, zone=None):
     """
     if not data or not data.strip():
         raise EmptyResponseError("Prazan odgovor")
-    if b"<!ENTITY" in data:
+    # Provera i za UTF-16 (znaci razdvojeni nulama) i za mala/velika slova
+    if b"<!entity" in data.replace(b"\x00", b"").lower():
         raise ParseError("XML sa definicijom entiteta nije dozvoljen")
     try:
         root = ET.fromstring(data)
-    except ET.ParseError as error:
+    except (ET.ParseError, LookupError, ValueError) as error:  # LookupError: nepoznato kodiranje
         raise ParseError("Neispravan XML: %s" % error)
     if root.tag != "tv":
         raise ParseError("Nije XMLTV (koren je <%s>)" % root.tag)
@@ -129,7 +138,7 @@ def parse_xmltv(data, channel_id, zone=None):
         if (node.get("channel") or "").casefold() != wanted:
             other += 1
             continue
-        title = _text(node, "title")
+        title = _text(node, "title", MAX_TITLE)
         if not title:
             no_title += 1
             continue
@@ -154,8 +163,8 @@ def parse_xmltv(data, channel_id, zone=None):
                 title=title,
                 start_utc=start,
                 end_utc=end,
-                description=_text(node, "desc"),
-                category=_text(node, "category"),
+                description=_text(node, "desc", MAX_DESCRIPTION),
+                category=_text(node, "category", MAX_CATEGORY),
             )
         )
 

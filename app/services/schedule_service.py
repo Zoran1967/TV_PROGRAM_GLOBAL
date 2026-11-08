@@ -130,6 +130,23 @@ class ScheduleService:
         self._store = store
         self._cache = {}  # (source_id, source_channel_id) -> _CacheEntry
         self._lock = threading.Lock()
+        # Podesavanje osvezavanja (Faza 7): korisnik moze samo da produzi rok izvora
+        self._user_min_seconds = None
+        self._manual_only = False
+
+    @property
+    def manual_only(self):
+        """True: podaci se preuzimaju samo na dugme "Osvezi" (ili kad nema nicega sacuvanog)."""
+        return self._manual_only
+
+    def set_refresh_policy(self, min_seconds=None, manual_only=False):
+        """Korisnicko podesavanje osvezavanja. Rok izvora se nikad ne skracuje."""
+        self._user_min_seconds = min_seconds
+        self._manual_only = bool(manual_only)
+
+    def _fresh_for(self, info):
+        """Koliko dugo se preuzeti podaci smatraju svezim (sekunde)."""
+        return max(info.min_refresh_seconds, self._user_min_seconds or 0)
 
     def provider_summary(self):
         """[(id izvora, status licence)] za izvore koji su ucitani u ovoj izgradnji."""
@@ -190,7 +207,7 @@ class ScheduleService:
         return dict(
             channel=channel, source_name=info.name, attribution=info.attribution_text,
             license_status=info.license_status, timezone=source.timezone or "",
-            refresh_seconds=info.min_refresh_seconds,
+            refresh_seconds=self._fresh_for(info),
         )
 
     def _load_from(self, provider, channel, source, force):
@@ -205,9 +222,11 @@ class ScheduleService:
         now = int(self._clock())
         cached = self._cache_get(key)
         age = now - cached.fetched_at if cached else None
-        if cached and cached.error is None and age < (
-                MIN_MANUAL_REFRESH_SECONDS if force else info.min_refresh_seconds):
-            entry = cached  # svez kes (ili tek osvezeno rucno): bez mreze
+        if cached and (
+                (self._manual_only and not force)
+                or (cached.error is None
+                    and age < (MIN_MANUAL_REFRESH_SECONDS if force else self._fresh_for(info)))):
+            entry = cached  # svez kes (ili tek osvezeno rucno, ili rezim "samo rucno"): bez mreze
         else:
             try:
                 # Adapter bi trebalo da vrati sortirano; ovde se to jos jednom obezbedjuje

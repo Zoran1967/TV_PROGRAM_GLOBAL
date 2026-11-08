@@ -1,4 +1,4 @@
-"""Pravljenje servisa aplikacije (katalog, pretraga, raspored, omiljene)."""
+"""Pravljenje servisa aplikacije (katalog, pretraga, raspored, omiljene, podesavanja)."""
 
 import logging
 from typing import NamedTuple, Optional
@@ -9,45 +9,59 @@ from app.providers.registry import ProviderRegistry, load_registry
 from app.services.favourites_service import FavouritesService
 from app.services.schedule_service import ScheduleService
 from app.services.search_service import ChannelSearchService
+from app.services.settings_service import SettingsService
 
 LOGGER = logging.getLogger(__name__)
+
+# Stanje trajnog cuvanja (ekran Podesavanja ga prevodi na jezik interfejsa)
+STORAGE_ON = "on"
+STORAGE_MEMORY = "memory"  # nije podeseno: sve vazi samo do zatvaranja aplikacije
+STORAGE_UNAVAILABLE = "unavailable"
 
 
 class Services(NamedTuple):
     search: Optional[ChannelSearchService] = None
     schedule: Optional[ScheduleService] = None
     favourites: Optional[FavouritesService] = None
-    # Opis stanja trajnog cuvanja, za ekran Podesavanja
-    storage_info: str = "nedostupno"
+    # Podesavanja rade uvek (bez trajnog cuvanja vaze do zatvaranja aplikacije)
+    settings: SettingsService = None
+    storage_state: str = STORAGE_UNAVAILABLE
+    storage_detail: str = ""
+
+
+def _open_store(user_data_dir):
+    if not user_data_dir:
+        return None, STORAGE_MEMORY, ""
+    try:
+        return UserDatabase(UserDatabase.default_path(user_data_dir)), STORAGE_ON, ""
+    except UserDataError as error:
+        LOGGER.error("Trajno cuvanje nije dostupno: %s", error)
+        return None, STORAGE_UNAVAILABLE, str(error)
 
 
 def create_services(user_data_dir=None):
-    """Pravi sve servise. Bez kataloga nema nijednog; bez korisnicke baze nema omiljenih
-    ni trajnog kesa, ali pretraga i raspored rade (kes je tada samo u memoriji)."""
+    """Pravi sve servise. Bez kataloga nema pretrage ni rasporeda; bez korisnicke baze nema
+    omiljenih ni trajnog kesa ni trajnih podesavanja, ali pretraga i raspored rade."""
+    store, storage_state, storage_detail = _open_store(user_data_dir)
+    settings = SettingsService(store)
     try:
         catalog = CatalogDatabase()
     except CatalogError as error:
         LOGGER.error("Katalog stanica nije dostupan: %s", error)
-        return Services()
+        return Services(settings=settings, storage_state=storage_state,
+                        storage_detail=storage_detail)
     try:
         registry = load_registry()
     except (OSError, ValueError, KeyError) as error:
         LOGGER.error("Izvori rasporeda nisu ucitani: %s", error)
         registry = ProviderRegistry()
 
-    store = None
-    storage_info = "nije podešeno (samo memorija)"
-    if user_data_dir:
-        try:
-            store = UserDatabase(UserDatabase.default_path(user_data_dir))
-            storage_info = "uključeno"
-        except UserDataError as error:
-            LOGGER.error("Trajno cuvanje nije dostupno: %s", error)
-            storage_info = "nedostupno (%s)" % error
     favourites = FavouritesService(catalog, store) if store is not None else None
     return Services(
         search=ChannelSearchService(catalog),
         schedule=ScheduleService(catalog, registry, store=store),
         favourites=favourites,
-        storage_info=storage_info,
+        settings=settings,
+        storage_state=storage_state,
+        storage_detail=storage_detail,
     )

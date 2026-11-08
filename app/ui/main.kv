@@ -5,7 +5,7 @@
 
     MDTextField:
         id: query
-        hint_text: app.t("search_hint")
+        hint_text: app.t("search_hint", app.language)
         mode: "rectangle"
         line_color_focus: app.colors["gold"]
         hint_text_color_focus: app.colors["gold"]
@@ -32,7 +32,7 @@
             on_release: root.show_results()
 
         MDFlatButton:
-            text: app.t("schedule_refresh")
+            text: app.t("schedule_refresh", app.language)
             theme_text_color: "Custom"
             text_color: app.colors["gold"]
             disabled: not root.in_schedule
@@ -46,18 +46,26 @@
             opacity: 1 if root.favourites_enabled else 0
             on_release: root.toggle_favourite()
 
-    MDLabel:
-        text: root.schedule_text
-        theme_text_color: "Custom"
-        text_color: app.colors["gold"]
-        size_hint_y: None
-        height: self.texture_size[1] if self.text else 0
-
     MDScrollView:
         id: scroll
 
-        MDList:
-            id: results
+        MDBoxLayout:
+            orientation: "vertical"
+            adaptive_height: True
+
+            # Zaglavlje rasporeda je unutar liste (pomera se zajedno sa njom),
+            # da programska sema dobije ceo ekran.
+            MDLabel:
+                text: root.schedule_text
+                font_style: "Body2"
+                theme_text_color: "Custom"
+                text_color: app.colors["gold"]
+                size_hint_y: None
+                height: self.texture_size[1] if self.text else 0
+                padding: 0, 0, 0, dp(8)
+
+            MDList:
+                id: results
 
 <FavouritesView>:
     orientation: "vertical"
@@ -65,7 +73,7 @@
     spacing: dp(8)
 
     MDLabel:
-        text: app.t("favourites_title")
+        text: app.t("favourites_title", app.language)
         font_style: "H5"
         theme_text_color: "Custom"
         text_color: app.colors["gold"]
@@ -83,6 +91,60 @@
         MDList:
             id: results
 
+<SettingsView>:
+    orientation: "vertical"
+
+    MDScrollView:
+
+        MDBoxLayout:
+            orientation: "vertical"
+            adaptive_height: True
+            padding: dp(16), dp(8), dp(16), dp(16)
+            spacing: dp(12)
+
+            MDLabel:
+                text: app.t("settings_title", app.language)
+                font_style: "H5"
+                theme_text_color: "Custom"
+                text_color: app.colors["gold"]
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            MDLabel:
+                text: root.note_text
+                theme_text_color: "Custom"
+                text_color: app.colors["text_muted"]
+                size_hint_y: None
+                height: self.texture_size[1] if self.text else 0
+
+            MDBoxLayout:
+                id: options
+                orientation: "vertical"
+                adaptive_height: True
+                spacing: dp(4)
+
+            MDLabel:
+                text: app.t("about_title", app.language)
+                font_style: "Subtitle1"
+                theme_text_color: "Custom"
+                text_color: app.colors["gold"]
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            MDLabel:
+                text: app.runtime_info
+                theme_text_color: "Custom"
+                text_color: app.colors["text_muted"]
+                size_hint_y: None
+                height: self.texture_size[1]
+
+            MDLabel:
+                text: app.t("about_note", app.language)
+                theme_text_color: "Custom"
+                text_color: app.colors["text_muted"]
+                size_hint_y: None
+                height: self.texture_size[1]
+
 MDScreen:
     md_bg_color: app.colors["navy"]
 
@@ -91,7 +153,7 @@ MDScreen:
         padding: [0, app.inset_top, 0, app.inset_bottom]
 
         MDTopAppBar:
-            title: app.t("app_title")
+            title: app.t("app_title", app.language)
             md_bg_color: app.colors["navy_light"]
             specific_text_color: app.colors["gold"]
             elevation: 0
@@ -104,7 +166,7 @@ MDScreen:
 
             MDBottomNavigationItem:
                 name: "search"
-                text: app.t("tab_search")
+                text: app.t("tab_search", app.language)
                 icon: "magnify"
 
                 SearchView:
@@ -112,7 +174,7 @@ MDScreen:
 
             MDBottomNavigationItem:
                 name: "favourites"
-                text: app.t("tab_favourites")
+                text: app.t("tab_favourites", app.language)
                 icon: "star-outline"
 
                 FavouritesView:
@@ -120,47 +182,8 @@ MDScreen:
 
             MDBottomNavigationItem:
                 name: "settings"
-                text: app.t("tab_settings")
+                text: app.t("tab_settings", app.language)
                 icon: "cog-outline"
 
-                MDBoxLayout:
-                    orientation: "vertical"
-                    padding: dp(24)
-                    spacing: dp(16)
-
-                    MDLabel:
-                        text: app.t("settings_title")
-                        halign: "center"
-                        font_style: "H5"
-                        theme_text_color: "Custom"
-                        text_color: app.colors["gold"]
-                        size_hint_y: None
-                        height: self.texture_size[1]
-
-                    MDLabel:
-                        text: app.t("settings_placeholder")
-                        halign: "center"
-                        theme_text_color: "Custom"
-                        text_color: app.colors["text_muted"]
-                        size_hint_y: None
-                        height: self.texture_size[1]
-
-                    MDLabel:
-                        text: app.t("about_title")
-                        font_style: "Subtitle1"
-                        theme_text_color: "Custom"
-                        text_color: app.colors["gold"]
-                        size_hint_y: None
-                        height: self.texture_size[1]
-
-                    MDLabel:
-                        text: app.runtime_info
-                        theme_text_color: "Custom"
-                        text_color: app.colors["text_muted"]
-                        size_hint_y: None
-                        height: self.texture_size[1]
-
-                    MDLabel:
-                        text: app.t("about_note")
-                        theme_text_color: "Custom"
-                        text_color: app.colors["text_muted"]
+                SettingsView:
+                    id: settings_view

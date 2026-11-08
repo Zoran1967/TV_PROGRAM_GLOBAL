@@ -18,6 +18,8 @@ from app.providers.errors import ZoneUnavailableError
 from app.providers.xmltv import load_zone
 from app.services.schedule_service import ScheduleOutcome, ScheduleStatus
 from app.services.search_service import SearchStatus
+from app.utils.clockfmt import ClockFormat, format_date
+from app.utils.countries import country_name
 from app.utils.text import normalize_text
 
 DEBOUNCE_SECONDS = 0.3
@@ -45,8 +47,12 @@ _STATUS_MESSAGES = {
 
 # ---- formatiranje (bez Kivy-ja, lako za testiranje) -------------------------
 
-def hhmm(value):
-    return value.strftime("%H:%M")
+_STATION_24H = ClockFormat()
+
+
+def hhmm(value, fmt=None):
+    """"19:30" (ili "7:30 PM" po podesavanju); bez fmt uvek 24-casovno u zoni vrednosti."""
+    return (fmt or _STATION_24H).clock(value)
 
 
 def format_age(app, seconds):
@@ -62,15 +68,19 @@ def format_age(app, seconds):
     return app.t("age_hours").format(h=hours, m=rest)
 
 
-def time_range(app, entry, local_date):
-    """"19:30-20:00"; emisija koja je pocela juce ili se zavrsava sutra je oznacena."""
-    start = hhmm(entry.start)
-    if entry.start.date() < local_date:
+def time_range(app, entry, local_date, fmt=None):
+    """"19:30-20:00"; emisija koja je pocela juce ili se zavrsava sutra je oznacena.
+
+    local_date je "danas" u zoni prikaza (fmt); bez fmt su to zona i datum stanice.
+    """
+    fmt = fmt or _STATION_24H
+    start = fmt.clock(entry.start)
+    if fmt.date_of(entry.start) < local_date:
         start = "%s %s" % (app.t("day_yesterday"), start)
     if entry.end is None:
         return start
-    end = hhmm(entry.end)
-    if entry.end.date() > local_date:
+    end = fmt.clock(entry.end)
+    if fmt.date_of(entry.end) > local_date:
         end = "%s (%s)" % (end, app.t("day_tomorrow"))
     return "%s-%s" % (start, end)
 
@@ -95,11 +105,55 @@ class SearchView(MDBoxLayout):
         self._signature = None
         self._tick_event = None
         self._last_reload = 0.0
+        self._status = None  # (kljuc teksta, vrednosti) poslednje poruke, da se prevede kad se jezik promeni
+        self._schedule_message = None  # kljuc poruke ispod naslova (ucitavanje, nema izvora, greska)
+        self._fmt = ClockFormat()  # prikaz vremena za poslednje crtanje rasporeda
 
     def on_kv_post(self, base_widget):
         app = MDApp.get_running_app()
-        self.status_text = app.t("search_examples")
+        self._set_status("search_examples")
         self.back_text = app.t("schedule_back")
+        app.bind(ui_version=self._on_settings_changed)
+
+    # ---- podesavanja: jezik, tema, format vremena --------------------------------
+
+    def _set_status(self, key=None, **values):
+        """Postavlja poruku iznad liste; pamti je da bi se prevela pri promeni jezika."""
+        self._status = (key, values) if key else None
+        self._show_status()
+
+    def _show_status(self):
+        app = MDApp.get_running_app()
+        if self._status is None:
+            self.status_text = ""
+        else:
+            key, values = self._status
+            self.status_text = app.t(key).format(**values)
+
+    def _on_settings_changed(self, *_args):
+        """Ponovo crta prikaz sa novim jezikom, formatom vremena ili zonom (bez mreze)."""
+        app = MDApp.get_running_app()
+        self.back_text = app.t(
+            "schedule_back_favourites" if self._origin == "favourites" else "schedule_back")
+        if self.in_schedule:
+            if self._outcome is not None:
+                self._render(app, self._outcome)
+            elif self._channel is not None and self._schedule_message:
+                self._set_schedule_message(app, self._channel, self._schedule_message)
+        elif self._last_outcome is not None:
+            self._render_search(app, self._last_outcome)
+        else:
+            self._show_status()
+
+    def _set_schedule_message(self, app, channel, key):
+        """Naslov stanice i jedna poruka ispod njega (ucitavanje, nema izvora, greska)."""
+        self._schedule_message = key
+        self.schedule_text = "%s\n%s" % (self._title(app, channel), app.t(key))
+
+    @staticmethod
+    def _title(app, channel):
+        return app.t("schedule_title").format(
+            name=channel.name, country=country_name(channel, app.language))
 
     # ---- pretraga ---------------------------------------------------------
 
@@ -118,7 +172,7 @@ class SearchView(MDBoxLayout):
         self._last_outcome = None
         service = app.search_service
         if service is None:
-            self.status_text = app.t("search_error")
+            self._set_status("search_error")
             return
 
         started = time.perf_counter()
@@ -134,18 +188,18 @@ class SearchView(MDBoxLayout):
         if outcome.status == SearchStatus.OK:
             self._show_results(app, outcome)
         elif outcome.status == SearchStatus.TOO_SHORT:
-            self.status_text = app.t("search_too_short")
+            self._set_status("search_too_short")
         elif outcome.status == SearchStatus.NOT_FOUND:
-            self.status_text = app.t("search_not_found")
+            self._set_status("search_not_found")
         elif outcome.status == SearchStatus.CATALOG_ERROR:
-            self.status_text = app.t("search_error")
+            self._set_status("search_error")
         else:
-            self.status_text = app.t("search_examples")
+            self._set_status("search_examples")
 
     def _show_results(self, app, outcome):
         count = len(outcome.results)
         key = "search_truncated" if outcome.truncated else "search_count"
-        self.status_text = app.t(key).format(count=count)
+        self._set_status(key, count=count)
         for result in outcome.results:
             item = TwoLineListItem(
                 text=result.channel.name,
@@ -157,7 +211,7 @@ class SearchView(MDBoxLayout):
     @staticmethod
     def _secondary_text(app, result):
         channel = result.channel
-        parts = ["%s (%s)" % (channel.country_name, channel.country_code)]
+        parts = ["%s (%s)" % (country_name(channel, app.language), channel.country_code)]
         if channel.network and channel.network.casefold() != channel.name.casefold():
             parts.append(channel.network)
         if normalize_text(result.matched_alias) != normalize_text(channel.name):
@@ -184,21 +238,20 @@ class SearchView(MDBoxLayout):
         self._sync_favourite()
         self._outcome, self._signature = None, None
         self.in_schedule = True
-        self.status_text = ""
+        self._set_status()
         self.ids.results.clear_widgets()
-        title = app.t("schedule_title").format(name=channel.name, country=channel.country_name)
 
         service = app.schedule_service
         if channel.source_count == 0 or service is None:
-            self.schedule_text = "%s\n%s" % (title, app.t("schedule_no_source"))
+            self._set_schedule_message(app, channel, "schedule_no_source")
             return
         try:
             self._sources = service.sources_for(channel)
         except Exception:  # greska baze ne sme da sruši aplikaciju
             _LOGGER.exception("Izvori stanice nisu procitani")
-            self.schedule_text = "%s\n%s" % (title, app.t("schedule_error"))
+            self._set_schedule_message(app, channel, "schedule_error")
             return
-        self.schedule_text = "%s\n%s" % (title, app.t("schedule_loading"))
+        self._set_schedule_message(app, channel, "schedule_loading")
         self._start_load(service, force)
 
     def refresh_schedule(self):
@@ -235,6 +288,8 @@ class SearchView(MDBoxLayout):
 
     def _render(self, app, outcome):
         """Crta zaglavlje i listu emisija."""
+        self._schedule_message = None
+        self._fmt = app.clock_format()
         self._signature = self._signature_of(outcome)
         self.schedule_text = self._header_text(app, outcome)
         results = self.ids.results
@@ -266,12 +321,13 @@ class SearchView(MDBoxLayout):
         )
 
     def _header_text(self, app, outcome):
-        channel = outcome.channel
-        lines = [app.t("schedule_title").format(name=channel.name, country=channel.country_name)]
+        self._fmt = app.clock_format()
+        lines = [self._title(app, outcome.channel)]
         if outcome.status in (ScheduleStatus.OK, ScheduleStatus.NO_DATA_FOR_DATE):
             lines.extend(self._status_lines(app, outcome))
             if outcome.status == ScheduleStatus.NO_DATA_FOR_DATE:
-                lines.append(app.t("schedule_no_data_date").format(date=self._date(outcome.local_date)))
+                lines.append(app.t("schedule_no_data_date").format(
+                    date=self._date(app, outcome.local_date)))
         elif outcome.status == ScheduleStatus.HTTP_ERROR:
             lines.append(self._http_message(app, outcome.http_status))
             lines.extend(self._license_note(app, outcome))
@@ -282,10 +338,16 @@ class SearchView(MDBoxLayout):
 
     def _status_lines(self, app, outcome):
         lines = [app.t("schedule_date_zone").format(
-            date=self._date(outcome.local_date), zone=outcome.timezone, label=outcome.zone_label)]
+            date=self._date(app, outcome.local_date), zone=outcome.timezone,
+            label=outcome.zone_label)]
         if outcome.now_local is not None:
+            # Vreme u stanici ostaje u zoni stanice (samo se 12/24 h bira po podesavanju)
             lines.append(app.t("station_time").format(
-                time=hhmm(outcome.now_local), label=outcome.zone_label))
+                time=ClockFormat(self._fmt.hour12).clock(outcome.now_local),
+                label=outcome.zone_label))
+            if self._fmt.converts:
+                lines.append(app.t("time_shown_in").format(
+                    zone=app.device_zone()[1], label=self._fmt.zone_label(outcome.now_local)))
         lines.append(self._now_line(app, outcome))
         lines.append(self._next_line(app, outcome))
         lines.append(app.t("schedule_source").format(source=outcome.source_name))
@@ -300,7 +362,8 @@ class SearchView(MDBoxLayout):
         left = (outcome.current_end - outcome.now_local).total_seconds()
         key = "now_line_derived" if outcome.current_end_derived else "now_line"
         return app.t(key).format(
-            title=current.title, end=hhmm(outcome.current_end), left=self._left(app, left))
+            title=current.title, end=self._fmt.clock(outcome.current_end),
+            left=self._left(app, left))
 
     def _left(self, app, seconds):
         minutes = int(seconds // 60)
@@ -313,9 +376,16 @@ class SearchView(MDBoxLayout):
         if following is None:
             return app.t("next_none")
         key = "next_line"
-        if outcome.local_date is not None and following.start.date() > outcome.local_date:
+        today = self._today(outcome)
+        if today is not None and self._fmt.date_of(following.start) > today:
             key = "next_line_tomorrow"
-        return app.t(key).format(title=following.title, time=hhmm(following.start))
+        return app.t(key).format(title=following.title, time=self._fmt.clock(following.start))
+
+    def _today(self, outcome):
+        """"Danas" u zoni prikaza: datum stanice, ili datum uredjaja kad se vreme prikazuje po njemu."""
+        if self._fmt.converts and outcome.now_local is not None:
+            return self._fmt.date_of(outcome.now_local)
+        return outcome.local_date
 
     def _freshness_lines(self, app, outcome):
         if outcome.stale:
@@ -326,16 +396,18 @@ class SearchView(MDBoxLayout):
         fetched = datetime.datetime.fromtimestamp(outcome.fetched_at, zone)
         age = int(outcome.now_local.timestamp()) - outcome.fetched_at
         if outcome.refresh_seconds and age > outcome.refresh_seconds:
-            return [app.t("fresh_old").format(age=format_age(app, age), time=hhmm(fetched))]
-        return [app.t("fresh_ok").format(time=hhmm(fetched), age=format_age(app, age))]
+            return [app.t("fresh_old").format(
+                age=format_age(app, age), time=self._fmt.clock(fetched))]
+        return [app.t("fresh_ok").format(
+            time=self._fmt.clock(fetched), age=format_age(app, age))]
 
     @staticmethod
     def _license_note(app, outcome):
         return [app.t("schedule_dev_note")] if outcome.license_status == "pending" else []
 
     @staticmethod
-    def _date(value):
-        return value.strftime("%d.%m.%Y.") if value else ""
+    def _date(app, value):
+        return format_date(value, app.language)
 
     def _reason(self, app, outcome):
         if outcome.error_status == ScheduleStatus.HTTP_ERROR:
@@ -349,7 +421,7 @@ class SearchView(MDBoxLayout):
         return app.t("schedule_http_error").format(code=status)
 
     def _entry_item(self, app, entry, outcome):
-        times = time_range(app, entry, outcome.local_date)
+        times = time_range(app, entry, self._today(outcome), self._fmt)
         label = ""
         if entry.is_current:
             label = app.t("label_now") + "  "
@@ -373,10 +445,9 @@ class SearchView(MDBoxLayout):
             item.secondary_theme_text_color = "Hint"
         return item
 
-    @staticmethod
-    def _gap_item(app, entry):
+    def _gap_item(self, app, entry):
         item = OneLineListItem(text=app.t("schedule_gap").format(
-            start=hhmm(entry.end), end=hhmm(entry.gap_until)))
+            start=self._fmt.clock(entry.end), end=self._fmt.clock(entry.gap_until)))
         item.theme_text_color = "Hint"
         return item
 
@@ -417,6 +488,8 @@ class SearchView(MDBoxLayout):
             self._maybe_reload(service)
 
     def _maybe_reload(self, service):
+        if getattr(service, "manual_only", False):
+            return  # podesavanje "Samo ručno": novi podaci samo na dugme Osvezi
         if time.time() - self._last_reload >= RELOAD_COOLDOWN_SECONDS:
             self._request_id += 1
             self._start_load(service, False)
@@ -430,7 +503,7 @@ class SearchView(MDBoxLayout):
         if self._last_outcome is not None:
             self._render_search(app, self._last_outcome)
         else:
-            self.status_text = app.t("search_examples")
+            self._set_status("search_examples")
         if came_from_favourites:
             self._origin = "search"
             app.show_favourites_tab()
@@ -462,9 +535,9 @@ class SearchView(MDBoxLayout):
             service.toggle(self._channel)
         except Exception:  # greska baze ne sme da sruši aplikaciju
             _LOGGER.exception("Omiljena stanica nije sacuvana")
-            self.status_text = app.t("fav_error")
+            self._set_status("fav_error")
             return
-        self.status_text = ""
+        self._set_status()
         self._sync_favourite()
         app.favourites_changed()
 
@@ -473,5 +546,6 @@ class SearchView(MDBoxLayout):
         self._request_id += 1  # odgovor koji tek stize vise se ne prikazuje
         self.in_schedule = False
         self.schedule_text = ""
+        self._schedule_message = None
         self._channel = self._sources = self._outcome = self._signature = None
         self._sync_favourite()

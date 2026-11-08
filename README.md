@@ -3,11 +3,11 @@
 Android aplikacija (Python, Kivy/KivyMD) za pronalazenje TV stanica i njihovog dnevnog rasporeda.
 Aplikacija prikazuje TV rasporede, ne TV prenos.
 
-**Status: Faza 6 - omiljene stanice i trajni kes.** Pretraga radi nad ugradjenim katalogom stanica (bez
+**Status: Faza 8 - testiranje i stabilizacija.** Pretraga radi nad ugradjenim katalogom stanica (bez
 interneta). Za 126 stanica sa Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna
 Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnji program sa
 oznakama "Sada" i "Sledece". Omiljene stanice i poslednji preuzeti raspored ostaju sacuvani i
-posle zatvaranja aplikacije (Faza 6). Podesavanja i jezici stizu u Fazi 7.
+posle zatvaranja aplikacije (Faza 6). Kartica Podesavanja (Faza 7) bira jezik, temu, vreme i osvezavanje.
 
 ## Pretraga (Faza 3)
 
@@ -93,6 +93,51 @@ posle zatvaranja aplikacije (Faza 6). Podesavanja i jezici stizu u Fazi 7.
   u memoriji), a kartica Omiljeni to objasnjava; stanje se vidi i u Podesavanjima.
 - Za razvoj i testove: promenljiva okruzenja `TVPG_USER_DATA_DIR` menja folder korisnickih podataka.
 
+## Podesavanja i lokalizacija (Faza 7)
+
+Kartica **Podesavanja**: dodir na opciju je odmah primenjuje i trajno cuva (tabela `setting` u
+`userdata.db`; baza verzije 1 se pri prvom pokretanju sama dopuni, omiljene i kes ostaju).
+
+- **Jezik:** srpski (podrazumevano) i engleski. Menja se ceo interfejs, poruke, datum i nazivi
+  drzava (srpski prevodi su u `app/utils/countries.py`; drzava bez prevoda ostaje na engleskom).
+  Novi jezik: novi recnik u `app/strings.py` (isti kljucevi, to proverava test), oznaka u
+  `app/services/settings_service.py` i kljuc `lang_<oznaka>`.
+- **Tema:** tamna ili svetla (`app/theme.py`, kontrast boja je proveren testom).
+- **Format vremena:** 24 sata ili 12 sati (7:30 PM).
+- **Prikaz vremena:** vreme stanice (preporuceno, kao do sada) ili vreme na uredjaju. Zona uredjaja
+  se cita iz Androida; ako nije prepoznata kao IANA zona, ostaje vreme stanice (ne nagadja se).
+  Oznake "juce/sutra" se tada racunaju prema danu u zoni uredjaja.
+- **Osvezavanje:** prema roku izvora (6 h za TvProfil), najvise na 12 ili 24 sata, ili samo rucno.
+  Rok izvora se ne moze skratiti. "Samo rucno": nema automatskog preuzimanja, dugme "Osvezi" radi,
+  "Sada/Sledece" se i dalje pomera bez interneta, a stariji podaci su oznaceni.
+- Ako trajno cuvanje ne radi, podesavanja vaze do zatvaranja aplikacije i ekran to kaze.
+
+## Testiranje i stabilizacija (Faza 8)
+
+Sta je proveravano (testovi na racunaru, `tests/`):
+
+- Mreza: nema veze, odbijena veza, prekinut odgovor, rok, spor server (ukupni rok), 404/5xx/429,
+  prazan odgovor, prevelik odgovor, gzip bomba, preusmeravanje na http.
+- Losi podaci: pokvaren i prazan XML, nepoznato kodiranje, definicije entiteta (i u UTF-16), losa vremena,
+  emisije bez naslova, 1500 nasumicno ostecenih fajlova (sme da izadje samo greska izvora, nikad pad).
+  Pretraga je provereno otporna na 3000 nasumicnih ulaza (navodnici, nulti znak, emoji, mnogo znakova).
+- Kes: ostecena i buduca baza, kes starih podataka, ponovno pokretanje, politika osvezavanja.
+
+Pronadjeno i ispravljeno:
+
+- **Aplikacija se zatvarala cim korisnik predje na drugu aplikaciju** (nedostajao `on_pause`).
+  Sada ostaje u pozadini, a pri povratku se prikaz ponovo racuna.
+- XML sa nepoznatim kodiranjem je davao opstu gresku umesto poruke "podaci nisu ispravni".
+- Definicija entiteta u UTF-16 ili malim slovima je zaobilazila zabranu.
+- Naslov/opis bez ogranicenja duzine: sada najvise 300 / 3000 / 100 znakova (kategorija), sa "...".
+
+Poznata ogranicenja:
+
+- Najgori slucaj sporog interneta: do tri pokusaja po 40 s (oko 2 minuta) pre poruke o gresci.
+  Ekran pokazuje "Ucitavam raspored..."; moze se napustiti, a zakasneli odgovor se ne prikazuje.
+- Razlicite velicine ekrana (mali telefoni, tablet, landscape) nisu proveravane, jer okruzenje nema Kivy.
+  Aplikacija je zakljucana na portret. Treba proveriti na telefonu.
+
 ## Katalog stanica
 
 - Fajl `data/catalog_seed.db` (SQLite, samo za citanje) ulazi u APK.
@@ -103,7 +148,7 @@ posle zatvaranja aplikacije (Faza 6). Podesavanja i jezici stizu u Fazi 7.
 - Stanica u katalogu NE znaci da za nju postoji raspored. Dostupnost rasporeda zavisi od izvora
   (Faza 4). Pokrivenost nije obecana.
 - Logotipi se ne koriste: prava na slike nisu proverena.
-- Nazivi drzava su na engleskom (iz izvora). Lokalizacija je u Fazi 7.
+- Nazivi drzava u katalogu su na engleskom (iz izvora); srpski prikaz je u `app/utils/countries.py`.
 - Novi katalog (potreban racunar ili Termux sa internetom):
   `python tools/build_catalog.py`
 
@@ -121,6 +166,11 @@ app/
   ui/main.kv                 izgled ekrana
   screens/search_view.py     ekran pretrage i rasporeda
   screens/favourites_view.py ekran omiljenih stanica
+  screens/settings_view.py   ekran podesavanja
+  services/settings_service.py podesavanja (vrednosti, cuvanje)
+  utils/clockfmt.py          12/24 h, zona prikaza, datum
+  utils/devicezone.py        zona uredjaja
+  utils/countries.py         srpski nazivi drzava
   services/search_service.py pretraga (pravila, statusi)
   services/schedule_service.py raspored za danas (kes u memoriji i na disku, greske, zona, osvezavanje prikaza)
   services/favourites_service.py omiljene stanice (korisnicka baza + katalog)
@@ -203,8 +253,9 @@ ekrana rade samo kad postoji ekran (na racunaru) i u GitHub Actions se preskacu.
   ekrana rasporeda i brzina na telefonu nisu proveravani.
 - Unos iz sredine reci (npr. `ena sport`) radi samo kad nema boljih rezultata. Pretraga ne zna za
   greske u kucanju.
-- Nazivi drzava su na engleskom (iz izvora); lokalizacija je u Fazi 7. Tekstovi se ne osvezavaju
-  pri promeni jezika.
+- Podesavanja (Faza 7) su proveravana samo testovima logike na racunaru. Testovi ekrana za nju su
+  napisani, ali nisu pokretani (nema Kivy-ja u okruzenju u kome je pisan kod). Na telefonu proveri:
+  da se naslovi donje navigacije menjaju sa jezikom, svetla tema, vreme na uredjaju.
 - KivyMD 1.2.0 je zastareo. KivyMD 2.0.0 sa PyPI zavisi od paketa materialshapes, koji trazi
   pycairo, a za pycairo nema Android paketa. Da li se 2.0.0 moze izgraditi nije proveravano.
 - Samo arm64-v8a. Debug APK, podrazumevana ikona. Potpisivanje i AAB dolaze u Fazi 9. Dokumentacija

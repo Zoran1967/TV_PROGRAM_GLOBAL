@@ -239,3 +239,55 @@ def test_end_time_in_repeated_hour_is_not_before_start():
     data = tv(programme("20261025013000", "20261025023000", "Preko promene"))
     programme_ = parse_xmltv(data, "test.sr", BELGRADE).programmes[0]
     assert programme_.end_utc >= programme_.start_utc
+
+
+# ---- Faza 8: pokvareni i zlonamerni podaci -----------------------------------------
+
+def test_unknown_xml_encoding_is_a_parse_error_not_a_crash():
+    data = b'<?xml version="1.0" encoding="UTF-J"?><tv></tv>'
+    with pytest.raises(ParseError):
+        parse_xmltv(data, "test.sr", BELGRADE)
+
+
+def test_entity_definition_is_rejected_in_any_case_and_in_utf16():
+    for text, encoding in (
+        ('<!DOCTYPE tv [<!entity a "x">]><tv/>', "utf-8"),
+        ('<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE tv [<!ENTITY a "x">]><tv/>', "utf-16"),
+    ):
+        with pytest.raises(ParseError):
+            parse_xmltv(text.encode(encoding), "test.sr", BELGRADE)
+
+
+def test_huge_fields_are_cut_to_a_sane_length():
+    huge = "x" * 100_000
+    data = tv(programme("20261106193000", "20261106200000", title=huge,
+                        extra="<desc>%s</desc><category>%s</category>" % (huge, huge)))
+    item = parse_xmltv(data, "test.sr", BELGRADE).programmes[0]
+    assert len(item.title) == 300 and item.title.endswith("...")
+    assert len(item.description) == 3000
+    assert len(item.category) == 100
+
+
+def test_random_damage_only_ever_raises_provider_errors():
+    import random
+
+    from app.providers.errors import ProviderError
+
+    base = tv(*[programme("2026110%d193000" % (i % 9 + 1), "2026110%d203000" % (i % 9 + 1),
+                          title="Naslov %d" % i) for i in range(15)])
+    rng = random.Random(7)
+    for _ in range(1500):
+        data = bytearray(base)
+        for _ in range(rng.randint(1, 5)):
+            pos = rng.randrange(len(data))
+            action = rng.random()
+            if action < 0.4:
+                data[pos] = rng.randrange(256)
+            elif action < 0.7:
+                del data[pos:pos + rng.randint(1, 30)]
+            else:
+                data[pos:pos] = bytes(rng.choice(b'<>&"=/ \x00\xff9') for _ in range(5))
+        try:
+            parse_xmltv(bytes(data), "test.sr", BELGRADE)
+        except ProviderError:
+            pass
