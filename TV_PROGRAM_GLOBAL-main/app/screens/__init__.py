@@ -1,1 +1,0 @@
-"""Ekrani aplikacije."""
