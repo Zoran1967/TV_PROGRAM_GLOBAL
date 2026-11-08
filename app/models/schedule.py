@@ -1,7 +1,7 @@
 """Modeli rasporeda."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -24,3 +24,15 @@ class Programme:
     end_utc: Optional[int] = None
     description: Optional[str] = None
     category: Optional[str] = None
+    # Dodatni podaci za ekran sa detaljima. Sva polja su prazna kada ih izvor ne daje;
+    # nista se ne dopunjuje nagadjanjem.
+    subtitle: Optional[str] = None  # naslov epizode
+    season: Optional[int] = None
+    episode: Optional[int] = None
+    episode_total: Optional[int] = None
+    year: Optional[int] = None
+    age_rating: Optional[str] = None
+    genres: Tuple[str, ...] = ()
+    countries: Tuple[str, ...] = ()
+    directors: Tuple[str, ...] = ()
+    actors: Tuple[str, ...] = ()

@@ -33,6 +33,14 @@ _TIME_RE = re.compile(
 MAX_TITLE = 300
 MAX_DESCRIPTION = 3000
 MAX_CATEGORY = 100
+MAX_SUBTITLE = 300
+MAX_PERSON = 100
+MAX_PEOPLE = 12
+MAX_LIST_ITEMS = 6
+MAX_SMALL = 60
+
+_ONSCREEN_RE = re.compile(r"[sS]\s*(\d{1,3})\s*[eE]\s*(\d{1,4})|(\d{1,2})\s*[xX]\s*(\d{1,4})")
+_NS_PART_RE = re.compile(r"^\s*(\d{1,5})?\s*(?:/\s*(\d{1,5}))?\s*$")
 
 
 class TimeFormatError(ValueError):
@@ -100,6 +108,84 @@ def _text(node, tag, limit):
     return value or None
 
 
+def _texts(node, tag, limit, max_items):
+    """Svi neprazni tekstovi elemenata <tag> (bez duplikata), ogranicenog broja i duzine."""
+    values = []
+    for child in node.findall(tag):
+        value = " ".join((child.text or "").split())
+        if not value:
+            continue
+        if len(value) > limit:
+            value = value[:limit - 3].rstrip() + "..."
+        if value not in values:
+            values.append(value)
+        if len(values) >= max_items:
+            break
+    return tuple(values)
+
+
+def _credits(node, tag):
+    box = node.find("credits")
+    if box is None:
+        return ()
+    return _texts(box, tag, MAX_PERSON, MAX_PEOPLE)
+
+
+def _year(node):
+    child = node.find("date")
+    text = (child.text or "").strip() if child is not None else ""
+    if len(text) >= 4 and text[:4].isdigit():
+        year = int(text[:4])
+        if 1850 <= year <= 2100:
+            return year
+    return None
+
+
+def _age_rating(node):
+    value = node.find("rating/value")
+    if value is None or not (value.text or "").strip():
+        return None
+    return " ".join(value.text.split())[:MAX_SMALL]
+
+
+def _number(text):
+    return int(text) if text and text.isdigit() else None
+
+
+def parse_episode_numbers(node):
+    """(sezona, epizoda, ukupno epizoda); polja koja izvor ne daje su None.
+
+    Podrzava xmltv_ns (\"1.4.0/1\": brojanje od nule) i onscreen (\"S02E05\", \"2x05\").
+    """
+    onscreen = None
+    for child in node.findall("episode-num"):
+        text = " ".join((child.text or "").split())
+        system = (child.get("system") or "").lower()
+        if system == "xmltv_ns":
+            parts = text.split(".")
+            if len(parts) >= 2:
+                season_part, episode_part = parts[0], parts[1]
+                season_match = _NS_PART_RE.match(season_part)
+                episode_match = _NS_PART_RE.match(episode_part)
+                if season_match and episode_match:
+                    season = _number(season_match.group(1))
+                    episode = _number(episode_match.group(1))
+                    total = _number(episode_match.group(2))
+                    if season is not None or episode is not None:
+                        return (
+                            season + 1 if season is not None else None,
+                            episode + 1 if episode is not None else None,
+                            total,
+                        )
+        elif onscreen is None:
+            match = _ONSCREEN_RE.search(text)
+            if match:
+                season = match.group(1) or match.group(3)
+                episode = match.group(2) or match.group(4)
+                onscreen = (int(season), int(episode), None)
+    return onscreen if onscreen is not None else (None, None, None)
+
+
 def _resolve_time(text, zone, not_before=None):
     """Vreme, a pri promeni na zimsko racunanje (dvaput isti sat) bira ono koje ne ide unazad."""
     value, floating = parse_time(text, zone, fold=0)
@@ -158,6 +244,8 @@ def parse_xmltv(data, channel_id, zone=None):
             continue
         seen.add(key)
         previous_start = start
+        season, episode, episode_total = parse_episode_numbers(node)
+        genres = _texts(node, "category", MAX_CATEGORY, MAX_LIST_ITEMS)
         programmes.append(
             Programme(
                 title=title,
@@ -165,6 +253,16 @@ def parse_xmltv(data, channel_id, zone=None):
                 end_utc=end,
                 description=_text(node, "desc", MAX_DESCRIPTION),
                 category=_text(node, "category", MAX_CATEGORY),
+                subtitle=_text(node, "sub-title", MAX_SUBTITLE),
+                season=season,
+                episode=episode,
+                episode_total=episode_total,
+                year=_year(node),
+                age_rating=_age_rating(node),
+                genres=genres,
+                countries=_texts(node, "country", MAX_SMALL, MAX_LIST_ITEMS),
+                directors=_credits(node, "director"),
+                actors=_credits(node, "actor"),
             )
         )
 

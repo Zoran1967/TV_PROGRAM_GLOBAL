@@ -3,11 +3,12 @@
 Android aplikacija (Python, Kivy/KivyMD) za pronalazenje TV stanica i njihovog dnevnog rasporeda.
 Aplikacija prikazuje TV rasporede, ne TV prenos.
 
-**Status: Faza 8 - testiranje i stabilizacija.** Pretraga radi nad ugradjenim katalogom stanica (bez
+**Status: Faza 9 - Android APK i isporuka (verzija 0.7.0).** Pretraga radi nad ugradjenim katalogom stanica (bez
 interneta). Za 126 stanica sa Balkana (Srbija, Hrvatska, Slovenija, BiH, Crna Gora, Severna
 Makedonija) aplikacija preuzima raspored sa izvora TvProfil i prikazuje danasnji program sa
 oznakama "Sada" i "Sledece". Omiljene stanice i poslednji preuzeti raspored ostaju sacuvani i
-posle zatvaranja aplikacije (Faza 6). Kartica Podesavanja (Faza 7) bira jezik, temu, vreme i osvezavanje.
+posle zatvaranja aplikacije (Faza 6). Kartica Podesavanja (Faza 7) bira jezik, temu, vreme i osvezavanje. Dodir na emisiju otvara
+detalje (film / serija / ostalo), vidi "Detalji emisije".
 
 ## Pretraga (Faza 3)
 
@@ -112,6 +113,24 @@ Kartica **Podesavanja**: dodir na opciju je odmah primenjuje i trajno cuva (tabe
   "Sada/Sledece" se i dalje pomera bez interneta, a stariji podaci su oznaceni.
 - Ako trajno cuvanje ne radi, podesavanja vaze do zatvaranja aplikacije i ekran to kaze.
 
+## Detalji emisije (dodir na emisiju)
+
+Dodir na emisiju u rasporedu otvara prozor sa celim opisom. Prikazuje se samo ono sto izvor stvarno
+daje; polje koje nedostaje se izostavlja (nista se ne izmislja i ne nagadja po naslovu).
+
+- **Naslov**, pa red sa vrstom: `FILM`, `SERIJA` ili `EMISIJA`, trajanje (iz pocetka i kraja) i uzrast.
+- **Film:** godina, zanr, rezija, uloge, zemlja.
+- **Serija:** sezona i epizoda (npr. "Sezona 2, epizoda 5 (od 10)"), naslov epizode, godina.
+- Vreme emitovanja sa nazivom stanice, pa ceo opis. Ako izvor nema opis, to pise.
+- Vrsta se odredjuje iz podataka izvora: serija je emisija sa brojem sezone/epizode ili sa kategorijom
+  "serija" (i slicno); film je emisija sa kategorijom "film". Dokumentarni film je "emisija".
+- Citaju se standardna XMLTV polja: `sub-title`, `episode-num` (`xmltv_ns` i `onscreen`), `date`,
+  `category`, `country`, `credits` (director/actor), `rating`. Zbog ogranicenja duzine glumaca je
+  najvise 12, a ostalih lista po 6 stavki.
+- **Neproveren deo:** ne zna se koja od ovih polja TvProfil stvarno salje (nema pristupa serveru). Ako
+  salje samo naslov, opis i kategoriju, prozor ce prikazati samo to. Prozor je proveren testom na
+  racunaru (sa Kivy-jem); kako izgleda na telefonu nije proveravano.
+
 ## Testiranje i stabilizacija (Faza 8)
 
 Sta je proveravano (testovi na racunaru, `tests/`):
@@ -207,6 +226,62 @@ tests/                       testovi
 | Android API / minimum | 36 / 24 | 36 trazi Google Play za nove aplikacije |
 | Arhitektura | arm64-v8a | |
 
+## Android APK i isporuka (Faza 9)
+
+**Sta je gotovo**
+
+- Buildozer podesen (`buildozer.spec`), dozvola samo `INTERNET`, arm64-v8a, API 36 / minimum 24.
+- Izgradnja u GitHub Actions (`Izgradnja APK`): prvo testovi, pa APK. APK ide u **Releases** i
+  **Artifacts**. Posle slanja ZIP-a u koren repozitorijuma raspakuje se sam i krece izgradnja.
+- Izgradnja je otporna na prekide preuzimanja (HTTP 504): FreeType, OpenSSL i SDL2_mixer se unapred
+  preuzimaju sa vise izvora, a cela izgradnja se do 10 puta ponavlja kad preuzimanje padne
+  (`ci/build.sh`). Prvi uspesan APK izgradjen je 8.11.2026.
+- Potpisivanje: vidi nize. Bez kljuca gradi se debug APK (potpisan privremenim debug kljucem).
+
+**Instalacija na telefon**
+
+1. Na GitHub-u otvori **Releases** (ili **Actions**, pa uspesnu izgradnju, pa **Artifacts**).
+2. Skini najnoviji `.apk` na telefon.
+3. Otvori skinuti fajl. Kad telefon pita, dozvoli instalaciju iz nepoznatih izvora za taj pregledac.
+4. Instaliraj i otvori **TV Program Global**.
+5. Nova verzija se instalira preko stare (ostaju omiljene i podesavanja), ali samo ako je potpisana
+   istim kljucem kao stara. Debug APK-ovi iz GitHub Actions nemaju stalan kljuc: ako instalacija preko
+   stare javi gresku, prvo ukloni staru aplikaciju (tada se brisu omiljene).
+
+**Potpisivanje (neobavezno)**
+
+Radi se samo kad su u GitHub-u (Settings, Secrets and variables, Actions) upisane tajne
+`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` (i neobavezno `KEY_PASSWORD`). Kljuc nikad ne ide u
+repozitorijum. Ako je podeseno samo nesto od toga, izgradnja staje sa jasnom porukom.
+
+0. Jednom, rucno na GitHub-u: u `.github/workflows/build-apk.yml` (ZIP ne menja taj folder) ispod
+   reda `- name: Izgradi APK` dodaj, poravnato sa `run:`:
+   ```yaml
+           env:
+             KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+             KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+             KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+             KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+   ```
+1. Napravi kljuc (jednom; cuvaj fajl i lozinku, bez njih se aplikacija ne moze azurirati):
+   `keytool -genkeypair -v -keystore tvpg.keystore -alias tvpg -keyalg RSA -keysize 2048 -validity 10000`
+2. Pretvori ga u tekst: `base64 -w0 tvpg.keystore` i taj tekst upisi kao tajnu `KEYSTORE_BASE64`.
+3. Lozinku upisi kao `KEYSTORE_PASSWORD`, a `tvpg` kao `KEY_ALIAS`.
+4. Pokreni izgradnju. U logu pise "gradi se potpisani release APK".
+
+**Sta nije proveravano (iskreno)**
+
+- Debug APK je izgradjen u GitHub Actions i korisnik je potvrdio da radi na njegovom telefonu. Nije
+  proveravan na emulatoru ni na vise uredjaja, niti na razlicitim verzijama Androida.
+- **Potpisana release izgradnja nije isprobana.** Skripta i logika tajni su proverene na racunaru
+  (nema tajni, nepotpune tajne, losa base64, ispravne tajne), ali stvarna izgradnja
+  `buildozer android release` sa kljucem nije pokretana. Ako padne, u logu ce biti razlog.
+- AAB i objava na Google Play nisu radjeni (trazili bi novije python-for-android i potvrdu
+  identifikatora `org.vukica`). Ikona je podrazumevana.
+- Dva testa ekrana podesavanja (promena teme i pamcenje posle ponovnog pokretanja) padaju kad se
+  pokrenu na racunaru sa ekranom, i na kodu bez ovih izmena; u GitHub Actions se preskacu. Nisu
+  ispravljana u ovoj fazi.
+
 ## Izgradnja APK-a (GitHub Actions)
 
 1. Otvori repozitorijum na GitHub-u, pa karticu **Actions**.
@@ -258,6 +333,5 @@ ekrana rade samo kad postoji ekran (na racunaru) i u GitHub Actions se preskacu.
   da se naslovi donje navigacije menjaju sa jezikom, svetla tema, vreme na uredjaju.
 - KivyMD 1.2.0 je zastareo. KivyMD 2.0.0 sa PyPI zavisi od paketa materialshapes, koji trazi
   pycairo, a za pycairo nema Android paketa. Da li se 2.0.0 moze izgraditi nije proveravano.
-- Samo arm64-v8a. Debug APK, podrazumevana ikona. Potpisivanje i AAB dolaze u Fazi 9. Dokumentacija
-  Buildozera navodi da za objavu na Google Play treba python-for-android "develop" - Faza 9.
+- Samo arm64-v8a, podrazumevana ikona. AAB i objava na Google Play nisu radjeni (vidi Fazu 9).
 - `package.domain = org.vukica`: identifikator aplikacije je trajan na Google Play, potvrdi pre objave.

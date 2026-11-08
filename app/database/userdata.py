@@ -194,10 +194,7 @@ class UserDatabase:
 
     def save_schedule(self, source_id, source_channel_id, fetched_at, programmes):
         payload = json.dumps(
-            [
-                [p.title, p.start_utc, p.end_utc, p.description, p.category]
-                for p in programmes
-            ],
+            [_encode_programme(p) for p in programmes],
             ensure_ascii=False,
             separators=(",", ":"),
         )
@@ -260,13 +257,60 @@ class UserDatabase:
         )
 
 
+def _encode_programme(p):
+    """[naslov, pocetak, kraj, opis, kategorija] + (samo ako ima) recnik sa dodatnim podacima."""
+    row = [p.title, p.start_utc, p.end_utc, p.description, p.category]
+    extra = {}
+    for key, value in (
+        ("st", p.subtitle), ("se", p.season), ("ep", p.episode), ("et", p.episode_total),
+        ("yr", p.year), ("ar", p.age_rating),
+    ):
+        if value is not None:
+            extra[key] = value
+    for key, values in (
+        ("ge", p.genres), ("co", p.countries), ("di", p.directors), ("ac", p.actors),
+    ):
+        if values:
+            extra[key] = list(values)
+    if extra:
+        row.append(extra)
+    return row
+
+
+def _optional_str(value, name):
+    if value is not None and not isinstance(value, str):
+        raise ValueError("neispravno polje %s" % name)
+    return value
+
+
+def _optional_int(value, name):
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+        raise ValueError("neispravno polje %s" % name)
+    return value
+
+
+def _str_tuple(value, name):
+    if value is None:
+        return ()
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError("neispravno polje %s" % name)
+    return tuple(value)
+
+
 def _decode_programmes(payload):
     items = json.loads(payload)
     if not isinstance(items, list):
         raise ValueError("ocekivana lista")
     programmes = []
     for item in items:
-        title, start, end, description, category = item
+        # Stariji sacuvani rasporedi imaju samo 5 vrednosti; novi imaju i recnik sa dodacima
+        if len(item) == 5:
+            title, start, end, description, category = item
+            extra = {}
+        else:
+            title, start, end, description, category, extra = item
+            if not isinstance(extra, dict):
+                raise ValueError("neispravni dodatni podaci")
         if not isinstance(title, str) or not title or isinstance(start, bool) or not isinstance(start, int):
             raise ValueError("neispravna emisija")
         if end is not None and (isinstance(end, bool) or not isinstance(end, int)):
@@ -275,5 +319,17 @@ def _decode_programmes(payload):
             raise ValueError("neispravan opis")
         if category is not None and not isinstance(category, str):
             raise ValueError("neispravna kategorija")
-        programmes.append(Programme(title, start, end, description, category))
+        programmes.append(Programme(
+            title, start, end, description, category,
+            subtitle=_optional_str(extra.get("st"), "st"),
+            season=_optional_int(extra.get("se"), "se"),
+            episode=_optional_int(extra.get("ep"), "ep"),
+            episode_total=_optional_int(extra.get("et"), "et"),
+            year=_optional_int(extra.get("yr"), "yr"),
+            age_rating=_optional_str(extra.get("ar"), "ar"),
+            genres=_str_tuple(extra.get("ge"), "ge"),
+            countries=_str_tuple(extra.get("co"), "co"),
+            directors=_str_tuple(extra.get("di"), "di"),
+            actors=_str_tuple(extra.get("ac"), "ac"),
+        ))
     return programmes

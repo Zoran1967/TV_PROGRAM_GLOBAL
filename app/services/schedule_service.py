@@ -15,6 +15,7 @@ from enum import Enum
 from typing import Optional, Tuple
 
 from app.models.channel import Channel
+from app.models.schedule import Programme
 from app.providers.errors import (
     EmptyResponseError,
     EmptyScheduleError,
@@ -62,6 +63,8 @@ class ScheduleEntry:
     title: str
     description: Optional[str] = None
     category: Optional[str] = None
+    # Izvorna emisija sa dodatnim podacima za ekran sa detaljima (opciono)
+    programme: Optional[Programme] = None
     is_current: bool = False
     is_next: bool = False
     is_past: bool = False
@@ -269,7 +272,8 @@ class ScheduleService:
         def entry_for(item, **flags):
             return ScheduleEntry(
                 start=to_local(item.start_utc), end=to_local(item.end_utc),
-                title=item.title, description=item.description, category=item.category, **flags)
+                title=item.title, description=item.description, category=item.category,
+                programme=item, **flags)
 
         entries = self._entries_for_today(programmes, zone, now, today, state, entry_for)
         extra = {}

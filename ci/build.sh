@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Izgradnja debug APK-a. Pokrece ga GitHub Actions (radni tok "Izgradnja APK").
+# Izgradnja APK-a (debug, ili potpisani release ako su podesene tajne za potpisivanje). Pokrece ga GitHub Actions (radni tok "Izgradnja APK").
 # Sistemski paketi i verzije se menjaju OVDE, ne u .yml fajlu.
 set -uo pipefail
 
@@ -73,10 +73,35 @@ pripremi_paket sdl2_mixer \
   "https://github.com/libsdl-org/SDL_mixer/releases/download/release-2.6.3/SDL2_mixer-2.6.3.tar.gz" \
   "https://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-2.6.3.tar.gz"
 
+echo "=== Potpisivanje (neobavezno) ==="
+# Kljuc za potpisivanje NIKAD ne ide u repozitorijum. Upisuje se u GitHub: Settings -> Secrets and
+# variables -> Actions: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS (i neobavezno KEY_PASSWORD).
+# Bez njih se gradi debug APK, kao do sada. Vidi README, odeljak "Faza 9".
+REZIM="debug"
+if [ -n "${KEYSTORE_BASE64:-}" ] || [ -n "${KEYSTORE_PASSWORD:-}" ] || [ -n "${KEY_ALIAS:-}" ]; then
+  if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
+    echo "GRESKA: za potpisivanje moraju biti podesena sva tri: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS."
+    exit 1
+  fi
+  KEYSTORE_FAJL="${RUNNER_TEMP:-/tmp}/release.keystore"
+  if ! printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_FAJL" 2>/dev/null || [ ! -s "$KEYSTORE_FAJL" ]; then
+    echo "GRESKA: KEYSTORE_BASE64 nije ispravan base64 tekst."
+    exit 1
+  fi
+  export P4A_RELEASE_KEYSTORE="$KEYSTORE_FAJL"
+  export P4A_RELEASE_KEYALIAS="$KEY_ALIAS"
+  export P4A_RELEASE_KEYSTORE_PASSWD="$KEYSTORE_PASSWORD"
+  export P4A_RELEASE_KEYALIAS_PASSWD="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+  REZIM="release"
+  echo "Kljuc je podesen: gradi se potpisani release APK."
+else
+  echo "Kljuc nije podesen: gradi se debug APK (potpisan privremenim debug kljucem)."
+fi
+
 echo "=== Izgradnja APK-a ==="
 # Preuzimanja biblioteka sa GitHub-a povremeno padnu (npr. HTTP 504); tada se pokusava ponovo.
 for pokusaj in 1 2 3 4 5 6 7 8 9 10; do
-  buildozer -v android debug 2>&1 | tee build.log
+  buildozer -v android "$REZIM" 2>&1 | tee build.log
   status=${PIPESTATUS[0]}
   if [ "$status" -eq 0 ]; then
     break

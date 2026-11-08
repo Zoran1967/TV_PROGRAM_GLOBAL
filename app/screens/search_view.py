@@ -11,7 +11,9 @@ from kivy.logger import Logger
 from kivy.metrics import dp
 from kivy.properties import BooleanProperty, StringProperty
 from kivymd.app import MDApp
+from kivymd.uix.button import MDFlatButton
 from kivymd.uix.boxlayout import MDBoxLayout
+from kivymd.uix.dialog import MDDialog
 from kivymd.uix.list import OneLineListItem, TwoLineListItem
 
 from app.providers.errors import ZoneUnavailableError
@@ -20,6 +22,7 @@ from app.services.schedule_service import ScheduleOutcome, ScheduleStatus
 from app.services.search_service import SearchStatus
 from app.utils.clockfmt import ClockFormat, format_date
 from app.utils.countries import country_name
+from app.utils.details import build_details
 from app.utils.text import normalize_text
 
 DEBOUNCE_SECONDS = 0.3
@@ -436,6 +439,7 @@ class SearchView(MDBoxLayout):
             progress = app.t("now_left_short").format(left=left)
             secondary = "%s%s%s" % (progress, SEPARATOR if secondary else "", secondary)
         item = TwoLineListItem(text="%s%s  %s" % (label, times, entry.title), secondary_text=secondary)
+        item.bind(on_release=partial(self._show_details, entry, outcome))
         if entry.is_current:
             item.bg_color = CURRENT_TINT
         elif entry.is_next:
@@ -444,6 +448,32 @@ class SearchView(MDBoxLayout):
             item.theme_text_color = "Hint"
             item.secondary_theme_text_color = "Hint"
         return item
+
+    # ---- detalji emisije (dodir na emisiju) ----------------------------------------
+
+    def _show_details(self, entry, outcome, *_args):
+        app = MDApp.get_running_app()
+        when = time_range(app, entry, self._today(outcome), self._fmt)
+        title, _kind, body = build_details(app.t, entry, when, outcome.channel.name)
+        self._close_details()
+        dialog = MDDialog(
+            title=title,
+            text=body,
+            buttons=[MDFlatButton(
+                text=app.t("detail_close"),
+                theme_text_color="Custom",
+                text_color=app.colors["gold"],
+                on_release=lambda *_: self._close_details(),
+            )],
+        )
+        self._details_dialog = dialog
+        dialog.open()
+
+    def _close_details(self):
+        dialog = getattr(self, "_details_dialog", None)
+        self._details_dialog = None
+        if dialog is not None:
+            dialog.dismiss()
 
     def _gap_item(self, app, entry):
         item = OneLineListItem(text=app.t("schedule_gap").format(
@@ -542,6 +572,7 @@ class SearchView(MDBoxLayout):
         app.favourites_changed()
 
     def _leave_schedule(self):
+        self._close_details()
         self._cancel_tick()
         self._request_id += 1  # odgovor koji tek stize vise se ne prikazuje
         self.in_schedule = False

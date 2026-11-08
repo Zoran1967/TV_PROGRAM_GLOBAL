@@ -626,3 +626,55 @@ def test_leaving_the_schedule_stops_the_clock_tick():
         assert view._tick_event is None
     finally:
         Window.remove_widget(root)
+
+
+def test_tapping_a_programme_opens_details_with_film_and_series_notes():
+    _needs_display()
+    import datetime
+    from zoneinfo import ZoneInfo
+    from kivy.clock import Clock
+    from kivy.core.window import Window
+    from app.models.schedule import Programme
+    from app.services.schedule_service import ScheduleEntry
+
+    zone = ZoneInfo("Europe/Belgrade")
+
+    def at(hour, minute):
+        return datetime.datetime(2026, 11, 6, hour, minute, tzinfo=zone)
+
+    film = Programme("Dugi film", 0, 0, "Opis filma.", "Film", year=2019,
+                     directors=("Reditelj Prvi",), actors=("Glumac Jedan",))
+    series = Programme("Serijal", 0, 0, "Opis epizode.", "Serija", subtitle="Povratak",
+                       season=2, episode=5, episode_total=10)
+    entries = (
+        ScheduleEntry(at(19, 0), at(20, 55), "Dugi film", "Opis filma.", "Film", programme=film),
+        ScheduleEntry(at(21, 0), at(21, 45), "Serijal", "Opis epizode.", "Serija", programme=series),
+    )
+
+    app, root, view = _build_app_view()
+    try:
+        app.schedule_service = StubSchedule(lambda channel: _outcome(channel, entries=entries))
+        _select_rts1_serbia(view)
+        assert _wait_until(lambda: "Učitavam" not in view.schedule_text)
+        rows = list(reversed(view.ids.results.children))
+        rows[0].dispatch("on_release")
+        for _ in range(5):
+            Clock.tick()
+        dialog = view._details_dialog
+        assert dialog is not None and dialog.title == "Dugi film"
+        assert "FILM · 2019 · 1 h 55 min" in dialog.text
+        assert "Režija: Reditelj Prvi" in dialog.text and dialog.text.endswith("Opis filma.")
+        assert "RTS 1" in dialog.text
+
+        rows[1].dispatch("on_release")  # drugi dijalog zamenjuje prvi
+        for _ in range(5):
+            Clock.tick()
+        assert view._details_dialog is not dialog and view._details_dialog.title == "Serijal"
+        assert "SERIJA · 45 min" in view._details_dialog.text
+        assert "Sezona 2, epizoda 5 (od 10)" in view._details_dialog.text
+        assert "Naslov epizode: Povratak" in view._details_dialog.text
+
+        view.show_results()  # izlazak iz rasporeda zatvara dijalog
+        assert view._details_dialog is None
+    finally:
+        Window.remove_widget(root)

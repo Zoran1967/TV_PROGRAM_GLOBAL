@@ -28,6 +28,9 @@ android.ndk_api = 24
 android.archs = arm64-v8a
 android.accept_sdk_license = True
 
+# Release izgradnja pravi APK (ne AAB): instalira se direktno na telefon.
+android.release_artifact = apk
+
 # Fiksirana verzija python-for-android (ponovljiva izgradnja)
 p4a.branch = v2026.05.09
 
