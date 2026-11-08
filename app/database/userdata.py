@@ -147,6 +147,30 @@ class UserDatabase:
 
         self._run(action)
 
+    def add_favourites(self, catalog_ids):
+        """Dodaje vise omiljenih odjednom (jedna transakcija). Vraca koliko je NOVIH dodato."""
+        now = int(self._clock())
+        rows = [(catalog_id, now) for catalog_id in catalog_ids]
+
+        def action(connection):
+            with connection:
+                before = connection.total_changes
+                connection.executemany(
+                    "INSERT OR IGNORE INTO favourite (catalog_id, added_at) VALUES (?, ?)", rows)
+                return connection.total_changes - before
+
+        return self._run(action)
+
+    def clear_favourites(self):
+        """Brise sve omiljene. Vraca koliko ih je bilo."""
+        def action(connection):
+            with connection:
+                before = connection.total_changes
+                connection.execute("DELETE FROM favourite")
+                return connection.total_changes - before
+
+        return self._run(action)
+
     def remove_favourite(self, catalog_id):
         def action(connection):
             with connection:

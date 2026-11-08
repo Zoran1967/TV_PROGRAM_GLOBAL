@@ -156,6 +156,10 @@ class ScheduleService:
         return [(source_id, self._registry.get(source_id).info.license_status)
                 for source_id in self._registry.ids()]
 
+    def channels_with_schedule(self):
+        """Stanice za koje ova izgradnja zaista moze da cita raspored (izvor je ucitan)."""
+        return self._catalog.channels_with_sources(self._registry.ids())
+
     def sources_for(self, channel):
         """Izvori za stanicu iz kataloga (pozivati iz glavne niti)."""
         return self._catalog.sources_for(channel.id)

@@ -102,12 +102,32 @@ class CatalogDatabase:
             " WHERE c.catalog_id = ?",
             (catalog_id,),
         ).fetchone()
-        if row is None:
-            return None
+        return None if row is None else self._channel_from_row(row)
+
+    @staticmethod
+    def _channel_from_row(row):
         return Channel(
             id=row[0], catalog_id=row[1], name=row[2], country_code=row[3],
             country_name=row[4], network=row[5], source_count=row[6],
         )
+
+    def channels_with_sources(self, source_ids):
+        """Sve stanice koje imaju raspored kod bar jednog od datih izvora,
+        po drzavama (naziv iz kataloga), pa po nazivu stanice."""
+        source_ids = tuple(source_ids)
+        if not source_ids:
+            return []
+        marks = ",".join("?" for _ in source_ids)
+        rows = self._connection.execute(
+            "SELECT c.id, c.catalog_id, c.name, c.country_code, co.name, c.network,"
+            " (SELECT COUNT(*) FROM channel_source s WHERE s.channel_id = c.id)"
+            " FROM channel c JOIN country co ON co.code = c.country_code"
+            " WHERE EXISTS (SELECT 1 FROM channel_source s"
+            "   WHERE s.channel_id = c.id AND s.source_id IN (%s))"
+            " ORDER BY co.name COLLATE NOCASE, c.name COLLATE NOCASE, c.catalog_id" % marks,
+            source_ids,
+        ).fetchall()
+        return [self._channel_from_row(row) for row in rows]
 
     def find(self, key, limit):
         """Trazi stanice po kljucu (vidi app.utils.text.normalize_key).

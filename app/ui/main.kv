@@ -87,6 +87,27 @@
         size_hint_y: None
         height: self.texture_size[1] if self.text else 0
 
+    MDBoxLayout:
+        orientation: "vertical"
+        adaptive_height: True
+        spacing: dp(4)
+
+        MDFlatButton:
+            text: root.add_all_text
+            theme_text_color: "Custom"
+            text_color: app.colors["gold"]
+            disabled: not root.can_add_all
+            opacity: 1 if root.can_add_all else 0.4
+            on_release: root.add_all()
+
+        MDFlatButton:
+            text: root.clear_text
+            theme_text_color: "Custom"
+            text_color: app.colors["text_muted"]
+            disabled: not root.can_clear
+            opacity: 1 if root.can_clear else 0.4
+            on_release: root.clear_all()
+
     MDScrollView:
         MDList:
             id: results

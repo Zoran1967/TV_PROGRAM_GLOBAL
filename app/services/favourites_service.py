@@ -38,6 +38,15 @@ class FavouritesService:
         """Menja stanje i vraca novo (True = sada je omiljena)."""
         return self.set_favourite(channel, not self.is_favourite(channel))
 
+    def add_channels(self, channels):
+        """Dodaje sve date stanice u omiljene. Vraca koliko je NOVIH dodato
+        (one koje su vec bile omiljene se ne broje i ne dupliraju)."""
+        return self._store.add_favourites([channel.catalog_id for channel in channels])
+
+    def clear(self):
+        """Uklanja sve omiljene. Vraca koliko ih je bilo."""
+        return self._store.clear_favourites()
+
     def list_channels(self):
         channels = []
         missing = 0

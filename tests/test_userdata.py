@@ -248,3 +248,29 @@ def test_real_catalog_lookup_by_catalog_id():
         assert catalog.get_by_catalog_id("ovo.ne.postoji") is None
     finally:
         catalog.close()
+
+
+def test_add_favourites_in_bulk_counts_only_new_and_clear_removes_all(db_path):
+    store = open_db(db_path)
+    store.add_favourite("RTS1.rs")
+    assert store.add_favourites(["RTS1.rs", "BBCOne.uk", "HRT1.hr"]) == 2
+    assert store.add_favourites(["BBCOne.uk"]) == 0
+    assert store.add_favourites([]) == 0
+    assert sorted(store.favourite_ids()) == ["BBCOne.uk", "HRT1.hr", "RTS1.rs"]
+    assert store.clear_favourites() == 3
+    assert store.favourite_ids() == [] and store.clear_favourites() == 0
+
+
+@pytest.mark.skipif(not os.path.isfile(SHIPPED_CATALOG), reason="nema kataloga")
+def test_channels_with_sources_are_sorted_by_country_and_name():
+    catalog = CatalogDatabase()
+    try:
+        channels = catalog.channels_with_sources(["tvprofil"])
+        assert len(channels) == 126 and all(c.source_count >= 1 for c in channels)
+        keys = [(c.country_name.casefold(), c.name.casefold()) for c in channels]
+        assert keys == sorted(keys)
+        assert {c.country_code for c in channels} >= {"RS", "HR", "BA", "SI", "MK", "ME"}
+        assert catalog.channels_with_sources([]) == []
+        assert catalog.channels_with_sources(["nepoznat"]) == []
+    finally:
+        catalog.close()

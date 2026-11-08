@@ -78,6 +78,10 @@ detalje (film / serija / ostalo), vidi "Detalji emisije".
 ## Omiljene stanice i trajni kes (Faza 6)
 
 - Zvezdica pored dugmeta "Osvezi" (na ekranu rasporeda) dodaje stanicu u omiljene ili je uklanja.
+- Kartica Omiljeni grupise stanice po drzavama (drzave po abecedi; naslov sa brojem stanica oznacava
+  gde pocinje svaka drzava), a svaka stanica ima zvezdicu. Dugme "Dodaj sve stanice sa rasporedom"
+  odjednom dodaje sve stanice za koje je izvor rasporeda ucitan u ovoj izgradnji (vec dodate se ne
+  dupliraju). "Ukloni sve omiljene" trazi drugi dodir u roku od 5 sekundi.
   Kartica **Omiljeni** prikazuje spisak (po nazivu, sa drzavom); dodir otvara raspored, a dugme
   "Nazad na omiljene" vraca na spisak.
 - Omiljene se cuvaju po `catalog_id` (npr. `RTS1.rs`), pa ostaju ispravne i kad se katalog osvezi.
