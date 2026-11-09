@@ -24,6 +24,7 @@ from app.providers.xmltv import load_zone
 from app.services.schedule_service import ScheduleOutcome, ScheduleStatus
 from app.services.search_service import SearchStatus
 from app.utils.clockfmt import ClockFormat, format_date
+from app.utils.chunked import sync_mode
 from app.utils.countries import country_name
 from app.utils.details import build_details
 from app.utils.text import normalize_text
@@ -209,7 +210,7 @@ class SearchView(MDBoxLayout):
                     continue
                 added += 1
                 if first:
-                    if added >= FIRST_BATCH:
+                    if added >= FIRST_BATCH and not sync_mode():
                         break
                 elif time.perf_counter() - started >= FRAME_BUDGET:
                     break

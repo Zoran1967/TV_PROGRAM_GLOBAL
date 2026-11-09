@@ -11,11 +11,13 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
 from kivymd.uix.list import IconLeftWidget, TwoLineAvatarIconListItem
 
+from app.utils.chunked import ChunkedFiller, sync_mode
 from app.utils.countries import country_name
 
 _LOGGER = logging.getLogger(__name__)
 SEPARATOR = " \u00b7 "
 CONFIRM_SECONDS = 5  # koliko dugo vazi "dodirnite ponovo" za brisanje svih
+POLL_SECONDS = 0.3  # koliko cesto se proverava da li je ekran Omiljenih postao vidljiv
 
 
 def channel_secondary(channel, language="sr"):
@@ -57,26 +59,61 @@ class FavouritesView(MDBoxLayout):
         app.bind(favourites_version=self._on_version)
         app.bind(ui_version=self._on_version)  # promena jezika
         self._confirm_event = None
-        self.refresh()
+        self._filler = ChunkedFiller()
+        self._signature = None  # po cemu je napravljen spisak na ekranu (jezik, tema, stanice)
+        self._dirty = False
+        self._poll_event = None
+        self._request_refresh()
 
     def _on_version(self, *_args):
-        self.refresh()
+        self._request_refresh()
+
+    def _request_refresh(self):
+        """Spisak se pravi samo dok je ekran Omiljenih vidljiv.
+
+        Dodir na zvezdicu na drugom ekranu ranije je odmah pravio ponovo sve stavke (stotinak
+        KivyMD stavki, desetak sekundi) iako se ekran ne vidi, pa Android javi "ne reaguje".
+        Ako ekran nije vidljiv, samo se pamti da je spisak zastareo; pravi se kad se prikaze.
+        """
+        if sync_mode() or self.get_root_window() is not None:
+            self.refresh()
+            return
+        self._dirty = True
+        if self._poll_event is None:
+            self._poll_event = Clock.schedule_interval(self._poll, POLL_SECONDS)
+
+    def _poll(self, _dt):
+        if self.get_root_window() is None:
+            return
+        if self._poll_event is not None:
+            self._poll_event.cancel()
+            self._poll_event = None
+        if self._dirty:
+            self.refresh()
 
     # ---- spisak ----------------------------------------------------------------
 
+    def _clear_list(self):
+        self._filler.cancel()
+        self._signature = None
+        self.ids.results.clear_widgets()
+
     def refresh(self):
         app = MDApp.get_running_app()
-        self.ids.results.clear_widgets()
+        self._dirty = False
         self._reset_confirm()
-        self._update_buttons(app, favourites=0)
         service = app.favourites_service
         if service is None:
+            self._clear_list()
+            self._update_buttons(app, favourites=0)
             self.status_text = app.t("favourites_unavailable")
             return
         try:
             result = service.list_channels()
         except Exception:  # greska baze ne sme da sruši aplikaciju
             _LOGGER.exception("Omiljene stanice nisu procitane")
+            self._clear_list()
+            self._update_buttons(app, favourites=0)
             self.status_text = app.t("favourites_error")
             return
         self._update_buttons(app, favourites=len(result.channels) + result.missing)
@@ -89,10 +126,23 @@ class FavouritesView(MDBoxLayout):
         if result.missing:
             lines.append(app.t("favourites_missing").format(count=result.missing))
         self.status_text = "\n".join(lines)
-        for country, channels in group_by_country(result.channels, app.language):
-            self.ids.results.add_widget(self._header(app, country, len(channels)))
+        # Ako se nista nije promenilo (isti jezik, tema i stanice), lista na ekranu ostaje netaknuta
+        signature = (
+            app.language, str(app.colors["gold"]), str(app.colors["navy_light"]),
+            tuple(channel.catalog_id for channel in result.channels),
+        )
+        if signature == self._signature:
+            return
+        self._clear_list()
+        self._signature = signature
+        groups = group_by_country(result.channels, app.language)
+        self._filler.fill(self.ids.results, self._builders(app, groups))
+
+    def _builders(self, app, groups):
+        for country, channels in groups:
+            yield partial(self._header, app, country, len(channels))
             for channel in channels:
-                self.ids.results.add_widget(self._item(app, channel))
+                yield partial(self._item, app, channel)
 
     @staticmethod
     def _header(app, country, count):
