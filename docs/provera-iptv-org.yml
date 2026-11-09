@@ -1,0 +1,37 @@
+# Ovaj fajl se ubacuje RUCNO u .github/workflows/ (zip ga tamo ne prenosi).
+# Pokrece se rucno: Actions -> "Provera iptv-org" -> Run workflow.
+# Rezultat: docs/pokrivenost_iptv-org.md (ne pokrece izgradnju APK-a, jer su docs/** ignorisani).
+name: Provera iptv-org
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  provera:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preuzmi kod
+        uses: actions/checkout@v4
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Uporedi stanice sa iptv-org/epg
+        run: python tools/iptv_org_coverage.py
+
+      - name: Sacuvaj izvestaj u repozitorijum
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/pokrivenost_iptv-org.md
+          if git diff --cached --quiet; then
+            echo "Nema promena u izvestaju."
+          else
+            git commit -m "Izvestaj: pokrivenost stanica rasporedima iz iptv-org/epg"
+            git push
+          fi

@@ -36,6 +36,10 @@ LOGGER = logging.getLogger(__name__)
 MAX_CACHE_ENTRIES = 50
 # Rucno osvezavanje ranije od ovoga koristi vec preuzete podatke (da se izvor ne opterecuje)
 MIN_MANUAL_REFRESH_SECONDS = 60
+# Izvor je vratio 404 (nema fajla za stanicu): ne pokusava se ponovo toliko dugo (rucno "Osvezi" posle
+# MIN_MANUAL_REFRESH_SECONDS). Ovo cuva se samo u memoriji, do zatvaranja aplikacije.
+MISSING_SOURCE_SECONDS = 6 * 3600
+MISSING_STATUSES = (404, 410)
 # Rupa u rasporedu se prijavljuje tek kad je duza od ovoga
 MIN_GAP_SECONDS = 120
 # Sacuvan raspored "iz buducnosti" za vise od ovoga (pogresan sat) se ne koristi
@@ -132,6 +136,7 @@ class ScheduleService:
         # Trajni kes (UserDatabase) ili None: tada se podaci cuvaju samo u memoriji
         self._store = store
         self._cache = {}  # (source_id, source_channel_id) -> _CacheEntry
+        self._missing = {}  # (source_id, source_channel_id) -> (vreme, HTTP status, tekst greske)
         self._lock = threading.Lock()
         # Podesavanje osvezavanja (Faza 7): korisnik moze samo da produzi rok izvora
         self._user_min_seconds = None
@@ -235,6 +240,11 @@ class ScheduleService:
                     and age < (MIN_MANUAL_REFRESH_SECONDS if force else self._fresh_for(info)))):
             entry = cached  # svez kes (ili tek osvezeno rucno, ili rezim "samo rucno"): bez mreze
         else:
+            known_missing = None if cached else self._known_missing(key, now, force)
+            if known_missing is not None:
+                # Izvor je maloprije rekao da nema fajl za ovu stanicu: bez mreze
+                return ScheduleOutcome(ScheduleStatus.HTTP_ERROR, detail=known_missing[2],
+                                       http_status=known_missing[1], **base)
             try:
                 # Adapter bi trebalo da vrati sortirano; ovde se to jos jednom obezbedjuje
                 programmes = sorted(provider.fetch_programmes(source),
@@ -242,11 +252,14 @@ class ScheduleService:
                 entry = _CacheEntry(now, programmes)
                 self._cache_put(key, entry)
                 self._persist(source, entry)
+                self._missing.pop(key, None)
             except ProviderError as error:
                 LOGGER.warning("Izvor %s, stanica %s: %s (%s)", info.id,
                                source.source_channel_id, error.code, error)
                 status = _status_for(error)
                 http_status = getattr(error, "status", None)
+                if not cached and http_status in MISSING_STATUSES:
+                    self._missing[key] = (now, http_status, str(error))
                 if not cached:
                     return ScheduleOutcome(status, detail=str(error), http_status=http_status, **base)
                 entry = _CacheEntry(cached.fetched_at, cached.programmes,
@@ -256,6 +269,15 @@ class ScheduleService:
                 LOGGER.exception("Neocekivana greska izvora %s", info.id)
                 return ScheduleOutcome(ScheduleStatus.ERROR, detail=str(error), **base)
         return self._build(provider, channel, source, zone, entry, now)
+
+    def _known_missing(self, key, now, force):
+        """(vreme, status, tekst) ako je izvor nedavno vratio 404 za ovu stanicu, inace None."""
+        missing = self._missing.get(key)
+        if missing is None:
+            return None
+        window = MIN_MANUAL_REFRESH_SECONDS if force else MISSING_SOURCE_SECONDS
+        age = now - missing[0]
+        return missing if 0 <= age < window else None
 
     def _build(self, provider, channel, source, zone, entry, now):
         base = self._base(provider, channel, source)
